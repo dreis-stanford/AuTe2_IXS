@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output/test files
+*.png
+*.pdf
+*.hdf5
+*.h5
+
+# Temporary directories
+.sixcircle_temp/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Editor backups
+*~
+*.bak
