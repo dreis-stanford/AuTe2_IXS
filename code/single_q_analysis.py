@@ -192,6 +192,24 @@ class SingleQAnalyzer:
                 atom_participation[imode, iat] = physical_amp[iat] / (total_amp + 1e-12)
         
         result['atom_participation'] = atom_participation
+
+        # Calculate signed longitudinal components (Q·e for each atom)
+        Q_cart = result['Q_cart']
+        Q_mag = result['Q_mag']
+        Q_hat = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
+        
+        longitudinal_signed = np.zeros((nmodes, self.xtal.nat))
+        
+        for imode in range(nmodes):
+            ev_mode = ev[:, imode]
+            total_ev_norm = np.linalg.norm(ev_mode)
+            
+            for iat in range(self.xtal.nat):
+                e_atom = ev_mode[3*iat:3*iat+3]
+                Q_dot_e = np.real(np.vdot(Q_hat, e_atom))  # vdot handles complex
+                longitudinal_signed[imode, iat] = 100 * Q_dot_e / (total_ev_norm + 1e-12)
+        
+        result['longitudinal_signed'] = longitudinal_signed
         
         # Calculate form factors
         Q_sinThOverLambda = Q_mag / (4 * np.pi)
@@ -276,7 +294,7 @@ class SingleQAnalyzer:
         
         # Mode table
         print('═'*95)
-        print('Mode  Freq(cm⁻¹)  Freq(meV)   L-char   IXS(S)    IXS(AS)   Au%   Te1%  Te2%  Polarization')
+        print('Mode  Freq(cm⁻¹)  Freq(meV)   L-char   IXS(S)    IXS(AS)   Au%   Au‖    Te1%  Te1‖   Te2%  Te2‖   Pol')
         print('─'*95)
         
         w_cm = result['frequencies_cm']
@@ -285,6 +303,7 @@ class SingleQAnalyzer:
         Is = result['IXS_stokes']
         Ias = result['IXS_antistokes']
         atom_part = result['atom_participation']
+        long_sign = result['longitudinal_signed']
         pol_type = result['pol_type']
         
         for i in range(len(w_cm)):
@@ -294,7 +313,9 @@ class SingleQAnalyzer:
             
             print(f'{i+1:2d}    {w_cm[i]:8.2f}    {w_meV[i]:7.2f}     {long_char[i]:5.3f}   '
                   f'{ixs_s_str:9s}  {ixs_as_str:9s}  '
-                  f'{atom_part[i,0]*100:4.1f}  {atom_part[i,1]*100:4.1f}  {atom_part[i,2]*100:4.1f}  '
+                  f'{atom_part[i,0]*100:4.1f} {long_sign[i,0]:+5.1f}  '
+                  f'{atom_part[i,1]*100:4.1f} {long_sign[i,1]:+5.1f}  '
+                  f'{atom_part[i,2]*100:4.1f} {long_sign[i,2]:+5.1f}  '
                   f'{pol_type[i]}')
         
         print('═'*95 + '\n')
