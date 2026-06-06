@@ -1,0 +1,54 @@
+&CONTROL
+  calculation = "scf",
+  pseudo_dir  = "../../pseudo",
+  outdir      = "tmp",
+  prefix='xx'
+  lecrpa = .false.,
+  etot_conv_thr = 0.000001
+  forc_conv_thr = 0.00001
+!  tstress = .true.,
+!  tprnfor = .true.,
+  wf_collect = .true.,
+  verbosity = 'high'
+/
+&SYSTEM
+  ibrav=  0,
+  nat=  2,
+  ntyp= 1,
+  ecutwfc=100,
+  nbnd = 5,
+  input_dft = 'pbe'
+/
+&ELECTRONS
+  diagonalization='david'
+  mixing_mode = 'plain'
+  mixing_beta = 0.7
+  conv_thr =  1.0d-16
+/
+&ions
+   trust_radius_ini  = 0.05
+   ion_dynamics      = 'bfgs'
+!   trust_radius_min = 0.0001
+/
+&cell
+    cell_dynamics     = 'bfgs'
+    press             =  0
+    cell_factor       =  1.2
+    press_conv_thr = 0.002
+!    cell_dofree = 'ibrav'
+/
+
+ATOMIC_SPECIES
+ Si  28.08550  Si_paw_PBE_norel.upf
+
+CELL_PARAMETERS {angstrom}
+   0.000000000   2.734629614   2.734629614
+   2.734629614   0.000000000   2.734629614
+   2.734629614   2.734629614   0.000000000
+
+ATOMIC_POSITIONS {crystal}
+Si     0.000000000         0.000000000         0.000000000
+Si     0.250000000         0.250000000         0.250000000
+
+K_POINTS {automatic}
+  8 8 8 0 0 0

@@ -84,7 +84,7 @@ class ForceConstants:
         print(f"  α = {self.alpha:.2f}°")
         print(f"  β = {self.beta:.2f}°")
         print(f"  γ = {self.gamma:.2f}°")
-        print(f"  Volume = {self.Vcell:.4f} ų")
+        print(f"  Volume = {self.Vcell:.4f} Å³")
         
         # 2. Species and Masses
         # Format: index 'symbol' mass_value
@@ -139,8 +139,22 @@ class ForceConstants:
         # If 'T', would read epsilon_infinity here (not implemented)
         
         # 5. Grid and Force Constants
-        grid_line = [int(x) for x in lines[idx].split()]
-        self.grid = np.array(grid_line)
+        # Skip any lines that don't look like a grid (e.g., supercell vectors)
+        while idx < len(lines):
+            line_parts = lines[idx].split()
+            try:
+                # Try to parse as integers
+                grid_line = [int(x) for x in line_parts]
+                # Check if it looks like a grid (should be 3 integers)
+                if len(grid_line) == 3 and all(g > 0 for g in grid_line):
+                    self.grid = np.array(grid_line)
+                    break
+            except ValueError:
+                # This line has floats or other non-integer data, skip it
+                pass
+            idx += 1
+        else:
+            raise ValueError("Could not find supercell grid in force constants file")
         n_cells = int(np.prod(self.grid))
         idx += 1
         
