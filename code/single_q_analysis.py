@@ -39,7 +39,7 @@ class SingleQAnalyzer:
         self.masses = masses
         self.kT_THz = kT_THz
         
-    def analyze(self, Q_input, coords='primitive', print_results=True, 
+    def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True, 
                 print_detailed=False, threshold_L=0.7, threshold_T=0.3):
         """
         Analyze phonons and IXS at single Q-point
@@ -192,7 +192,7 @@ class SingleQAnalyzer:
                 atom_participation[imode, iat] = physical_amp[iat] / (total_amp + 1e-12)
         
         result['atom_participation'] = atom_participation
-
+        
         # Calculate signed longitudinal components (Q·e for each atom)
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
@@ -206,7 +206,7 @@ class SingleQAnalyzer:
             
             for iat in range(self.xtal.nat):
                 e_atom = ev_mode[3*iat:3*iat+3]
-                Q_dot_e = np.real(np.vdot(Q_hat, e_atom))  # vdot handles complex
+                Q_dot_e = np.real(np.vdot(Q_hat, e_atom))
                 longitudinal_signed[imode, iat] = 100 * Q_dot_e / (total_ev_norm + 1e-12)
         
         result['longitudinal_signed'] = longitudinal_signed
@@ -238,11 +238,11 @@ class SingleQAnalyzer:
         
         # Print results
         if print_results:
-            self._print_results(result, print_detailed)
+            self._print_results(result, detailed=print_detailed, freq_unit=freq_unit)
         
         return result
     
-    def _print_results(self, result, detailed=False):
+    def _print_results(self, result, detailed=False, freq_unit='meV'):
         """Print analysis results"""
         
         print('\n' + '╔' + '='*64 + '╗')
@@ -294,7 +294,13 @@ class SingleQAnalyzer:
         
         # Mode table
         print('═'*95)
-        print('Mode  Freq(cm⁻¹)  Freq(meV)   L-char   IXS(S)    IXS(AS)   Au%   Au‖    Te1%  Te1‖   Te2%  Te2‖   Pol')
+        # Choose frequency unit
+        freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
+        freq_data = {'meV': result['frequencies_meV'], 
+                     'cm-1': result['frequencies_cm'],
+                     'THz': result['frequencies_THz']}[freq_unit]
+        
+        print(f'Mode  Freq({freq_label:>4s})   L-char   IXS(S)    IXS(AS)   Au%   Au‖    Te1%  Te1‖   Te2%  Te2‖   Pol')
         print('─'*95)
         
         w_cm = result['frequencies_cm']
@@ -311,7 +317,7 @@ class SingleQAnalyzer:
             ixs_s_str = self._format_xs(Is[i])
             ixs_as_str = self._format_xs(Ias[i])
             
-            print(f'{i+1:2d}    {w_cm[i]:8.2f}    {w_meV[i]:7.2f}     {long_char[i]:5.3f}   '
+            print(f'{i+1:2d}    {freq_data[i]:8.2f}     {long_char[i]:5.3f}   '
                   f'{ixs_s_str:9s}  {ixs_as_str:9s}  '
                   f'{atom_part[i,0]*100:4.1f} {long_sign[i,0]:+5.1f}  '
                   f'{atom_part[i,1]*100:4.1f} {long_sign[i,1]:+5.1f}  '
@@ -367,11 +373,13 @@ def interactive_mode():
     
     # Default coordinate system
     coord_system = 'primitive'
+    freq_unit = 'meV'
     
     print("Instructions:")
     print("  - Enter Q vector as three numbers (e.g., 0.5 0 0)")
     print("  - Press Enter on empty line to quit")
     print("  - Type 'conv', 'prim', or 'cart' to change coordinate system")
+    print("  - Type 'meV', 'THz', or 'invcm' to change frequency units")
     print(f"  - Current system: {coord_system}\n")
     
     while True:
@@ -383,22 +391,32 @@ def interactive_mode():
             print("\nExiting...")
             break
         
-        # Check for coordinate system change
-        user_lower = user_input.lower()
-        if user_lower in ['conv', 'conventional']:
-            coord_system = 'conventional'
-            print(f'→ Switched to conventional (C-centered) coordinates\n')
-            continue
-        elif user_lower in ['prim', 'primitive']:
+        # Check for command keywords first
+        if user_input.lower() == 'prim':
             coord_system = 'primitive'
-            print(f'→ Switched to primitive coordinates\n')
+            print("  → Switched to primitive coordinates\n")
             continue
-        elif user_lower in ['cart', 'cartesian']:
+        elif user_input.lower() == 'conv':
+            coord_system = 'conventional'
+            print("  → Switched to conventional coordinates\n")
+            continue
+        elif user_input.lower() == 'cart':
             coord_system = 'cartesian'
-            print(f'→ Switched to Cartesian coordinates (2π/Å)\n')
+            print("  → Switched to Cartesian coordinates\n")
+            continue
+        elif user_input.lower() == 'mev':
+            freq_unit = 'meV'
+            print("  → Switched to meV\n")
+            continue
+        elif user_input.lower() in ['cm', 'cm-1', 'invcm']:
+            freq_unit = 'cm-1'
+            print("  → Switched to cm⁻¹\n")
+            continue
+        elif user_input.lower() == 'thz':
+            freq_unit = 'THz'
+            print(f"  → Switched to THz\n")
             continue
         
-        # Try to parse Q vector
         try:
             Q = np.array([float(x) for x in user_input.split()])
             
@@ -418,7 +436,8 @@ def interactive_mode():
                 input_coords = coord_system
             
             # Analyze
-            result = analyzer.analyze(Q_input, coords=input_coords, 
+            result = analyzer.analyze(Q_input, coords=input_coords,
+                                     freq_unit=freq_unit,
                                      print_results=True, print_detailed=False)
             
         except ValueError as e:
