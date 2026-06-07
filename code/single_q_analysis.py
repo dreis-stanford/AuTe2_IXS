@@ -10,6 +10,7 @@ from .force_constants import ForceConstants
 from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
 from .form_factors import CalcAtomicfQ
 from .ixs import calc_ixs
+from .sixcircle_interface import SixCircleInterface
 from .aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
 
 
@@ -380,7 +381,10 @@ def interactive_mode():
     print("  - Press Enter on empty line to quit")
     print("  - Type 'conv', 'prim', or 'cart' to change coordinate system")
     print("  - Type 'meV', 'THz', or 'invcm' to change frequency units")
+    print("  - Type 'angles' to calculate diffractometer angles for last Q")
     print(f"  - Current system: {coord_system}\n")
+    
+    current_q = None
     
     while True:
         print('─' * 70)
@@ -416,6 +420,25 @@ def interactive_mode():
             freq_unit = 'THz'
             print(f"  → Switched to THz\n")
             continue
+        elif user_input.lower() == 'angles':
+            if current_q is None:
+                print("\n⚠ Enter a Q point first\n")
+                continue
+            try:
+                sixc = SixCircleInterface()
+                print("\n" + "="*70)
+                print("Diffractometer Angles" + (" (SIMULATION)" if sixc.simulation_mode else ""))
+                print("="*70)
+                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
+                angles = sixc.move_to_hkl(tuple(Q_conv), check_only=True)
+                print("\nAngles:")
+                for key, val in angles.items():
+                    print(f"  {key:5s} = {val:7.3f}°")
+                print("="*70 + "\n")
+            except Exception as e:
+                print(f"\n✗ {e}\n")
+            continue
         
         try:
             Q = np.array([float(x) for x in user_input.split()])
@@ -436,6 +459,7 @@ def interactive_mode():
                 input_coords = coord_system
             
             # Analyze
+            current_q = Q_input
             result = analyzer.analyze(Q_input, coords=input_coords,
                                      freq_unit=freq_unit,
                                      print_results=True, print_detailed=False)
