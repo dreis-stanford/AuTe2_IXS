@@ -12,6 +12,7 @@ from .form_factors import CalcAtomicfQ
 from .ixs import calc_ixs
 from .sixcircle_interface import SixCircleInterface
 from .aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
+from .modulated_structure import ModulatedStructure
 
 
 class SingleQAnalyzer:
@@ -39,6 +40,7 @@ class SingleQAnalyzer:
         self.Phi = Phi
         self.masses = masses
         self.kT_THz = kT_THz
+        self.mod_struct = ModulatedStructure()
         
     def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True, 
                 print_detailed=False, threshold_L=0.7, threshold_T=0.3):
@@ -275,7 +277,30 @@ class SingleQAnalyzer:
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
         
-        print(f'Q (conventional): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}] (r.l.u.)')
+        # Check if this is a satellite reflection
+        q_mod = self.mod_struct.q_mod
+        is_satellite = False
+        satellite_order = 0
+        Q_main = Q_conv
+        
+        # Try to determine if Q is near a satellite position
+        for m in range(-3, 4):
+            for h in range(-3, 4):
+                for k in range(-3, 4):
+                    for l in range(-3, 4):
+                        Q_test = np.array([h, k, l]) + m * q_mod
+                        if np.linalg.norm(Q_conv - Q_test) < 0.01:
+                            is_satellite = (m != 0)
+                            satellite_order = m
+                            Q_main = np.array([h, k, l])
+                            break
+        
+        if is_satellite:
+            print(f'Q (conventional): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}] (r.l.u.) ★ SATELLITE m={satellite_order:+d}')
+            print(f'  Main peak:      [{Q_main[0]:.0f}, {Q_main[1]:.0f}, {Q_main[2]:.0f}]')
+            print(f'  q_mod:          [{q_mod[0]:.4f}, {q_mod[1]:.4f}, {q_mod[2]:.4f}]')
+        else:
+            print(f'Q (conventional): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}] (r.l.u.)')
         print(f'Q (primitive):    [{Q_prim[0]:.4f}, {Q_prim[1]:.4f}, {Q_prim[2]:.4f}] (r.l.u.)')
         print(f'Q (Cartesian):    [{Q_cart[0]:.4f}, {Q_cart[1]:.4f}, {Q_cart[2]:.4f}] (2π/Å)')
         print(f'|Q| = {Q_mag:.4f} (2π/Å)\n')
@@ -398,6 +423,7 @@ def interactive_mode():
     
     print("Instructions:")
     print("  - Enter Q vector as three numbers (e.g., 0.5 0 0)")
+    print("  - For satellites, add order m: H K L m (e.g., 1 0 0 1 for first satellite)")
     print("  - Press Enter on empty line to quit")
     print("  - Type 'conv', 'prim', or 'cart' to change coordinate system")
     print("  - Type 'meV', 'THz', or 'invcm' to change frequency units")
@@ -538,10 +564,26 @@ def interactive_mode():
             continue
         
         try:
-            Q = np.array([float(x) for x in user_input.split()])
+            parts = user_input.split()
             
-            if len(Q) != 3:
-                print('⚠ Error: Please enter exactly 3 numbers\n')
+            if len(parts) == 3:
+                # Standard Q input: H K L
+                Q = np.array([float(x) for x in parts])
+                satellite_order = 0
+            elif len(parts) == 4:
+                # Satellite Q input: H K L m
+                Q_main = np.array([float(x) for x in parts[:3]])
+                satellite_order = int(parts[3])
+                # Calculate satellite position
+                q_mod = np.array(analyzer.mod_struct.q_mod)
+                Q = Q_main + satellite_order * q_mod
+                print(f'  Main reflection: [{Q_main[0]:.4f}, {Q_main[1]:.4f}, {Q_main[2]:.4f}]')
+                print(f'  Satellite order m={satellite_order}')
+                print(f'  Modulation vector: [{q_mod[0]:.4f}, {q_mod[1]:.4f}, {q_mod[2]:.4f}]')
+                print(f'  Satellite Q = Q_main + {satellite_order}*q_mod')
+                print(f'             = [{Q[0]:.4f}, {Q[1]:.4f}, {Q[2]:.4f}]\n')
+            else:
+                print('⚠ Error: Enter 3 numbers (H K L) or 4 numbers (H K L m) for satellites\n')
                 continue
             
             # Handle Cartesian input
