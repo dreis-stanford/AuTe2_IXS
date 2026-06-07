@@ -32,3 +32,4 @@ Thumbs.db
 # Editor backups
 *~
 *.bak
+*.backup
