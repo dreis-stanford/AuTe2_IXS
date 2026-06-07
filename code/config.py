@@ -45,18 +45,46 @@ DEFAULT_AGAP_H = 60  # Horizontal gap
 
 # Lattice parameters for AuTe2 (to be refined from experiment)
 # These are initial values - will be updated after orientation matrix refinement
+# Lattice parameters for AuTe2
+# From Reithmayer et al., Acta Crystallographica B49, 6 (1993)
 LATTICE_PARAMS = {
-    'a': 8.15,      # Angstroms
-    'b': 4.47,
-    'c': 5.08,
-    'alpha': 90.0,  # degrees
-    'beta': 90.0,
+    'a': 7.189,      # Angstroms
+    'b': 4.407,
+    'c': 5.069,
+    'alpha': 90.0,   # degrees
+    'beta': 89.96,
     'gamma': 90.0
+}
+
+# Experimental atomic positions (fractional coordinates)
+# C2/m space group, average structure
+# From Reithmayer et al., Acta Crystallographica B49, 6 (1993)
+EXPERIMENTAL_STRUCTURE = {
+    'Au': {
+        'wyckoff': '2a',  # Second position is from C-centering
+        'positions': [
+            [0.0, 0.0, 0.0],      # 2a
+            [0.5, 0.5, 0.0],      # 2d
+        ],
+        'occupancy': 1.0,
+        'mass': 196.97  # amu
+    },
+    'Te': {
+        'wyckoff': '4i',
+        'positions': [
+            [ 0.6884, 0.0,  0.2878],
+            [-0.6884, 0.0, -0.2878],
+            [ 0.1884, 0.5,  0.2878],  # +[1/2, 1/2, 0]
+            [ 0.8116, 0.5,  0.7122],  # symmetry equivalent
+        ],
+        'occupancy': 1.0,
+        'mass': 127.60  # amu
+    }
 }
 
 # Modulation vector (in r.l.u. of average structure)
 # This is the CDW/superstructure modulation
-MODULATION_VECTOR = (0.28, 0.0, 0.0)  # (qh, qk, ql)
+MODULATION_VECTOR = (-0.4076, 0.0, 0.4479)  # From Schutte et al., Acta Cryst. B44, 486 (1988) at 298K  # (qh, qk, ql)
 
 # Sample name/description
 SAMPLE_NAME = "AuTe2_CDW"
@@ -193,3 +221,94 @@ if __name__ != "__main__":
     # Only print brief status on import
     status = "AVAILABLE" if SIXCIRCLE_AVAILABLE else "SIMULATION MODE"
     print(f"AuTe2 IXS Config loaded - Sixcircle: {status}")
+
+
+# ============================================================================
+# AUTO-LOAD DFT STRUCTURE FROM FORCE CONSTANTS
+# ============================================================================
+
+def load_dft_structure_from_fc(fc_file='data/AuTe_2_m.fc'):
+    """
+    Auto-load DFT structure from force constants file
+    
+    Returns:
+    --------
+    dict with 'lattice' and 'positions' matching EXPERIMENTAL_STRUCTURE format
+    """
+    try:
+        from .force_constants import ForceConstants
+        import numpy as np
+        
+        print(f"Auto-loading DFT structure from {fc_file}...")
+        fc = ForceConstants(fc_file)
+        
+        # Extract lattice parameters (already calculated in ForceConstants)
+        structure = {
+            'source': f'DFT (auto-loaded from {fc_file})',
+            'lattice': {
+                'a': fc.a,
+                'b': fc.b,
+                'c': fc.c,
+                'alpha': fc.alpha,
+                'beta': fc.beta,
+                'gamma': fc.gamma
+            },
+            'positions': {}
+        }
+        
+        # Extract atomic positions
+        # fc.xs contains fractional coordinates [nat x 3]
+        # fc.atom_type_map tells us which atom is which type
+        # fc.symbols gives the element names
+        
+        for symbol in set(fc.symbols):
+            structure['positions'][symbol] = {
+                'frac_coords': [],
+                'mass': None
+            }
+        
+        for i in range(fc.nat):
+            atom_type_idx = fc.atom_type_map[i] - 1  # Convert to 0-indexed (1,2 -> 0,1)
+            symbol = fc.symbols[atom_type_idx]
+            pos = fc.xs[i].tolist()
+            structure['positions'][symbol]['frac_coords'].append(pos)
+            structure['positions'][symbol]['mass'] = fc.masses[atom_type_idx]
+        
+        print(f"  ✓ Loaded DFT lattice: a={fc.a:.4f}, b={fc.b:.4f}, c={fc.c:.4f} Å")
+        print(f"  ✓ Lattice angles: α={fc.alpha:.2f}°, β={fc.beta:.2f}°, γ={fc.gamma:.2f}°")
+        for symbol, data in structure['positions'].items():
+            n_atoms = len(data['frac_coords'])
+            print(f"  ✓ Found {n_atoms} {symbol} atom(s), mass={data['mass']:.2f} amu")
+        
+        return structure
+        
+    except Exception as e:
+        import traceback
+        print(f"  ✗ Could not auto-load DFT structure: {e}")
+        print("    Using placeholder DFT structure")
+        traceback.print_exc()
+        return None
+
+# Try to auto-load DFT structure
+print("\n" + "="*70)
+print("Loading DFT Structure")
+print("="*70)
+_dft_loaded = load_dft_structure_from_fc()
+
+if _dft_loaded is not None:
+    DFT_STRUCTURE = _dft_loaded
+else:
+    # Placeholder if auto-load fails
+    DFT_STRUCTURE = {
+        'source': 'Placeholder - DFT structure not loaded',
+        'lattice': {
+            'a': 8.15, 'b': 4.47, 'c': 5.08,
+            'alpha': 90.0, 'beta': 90.0, 'gamma': 90.0
+        },
+        'positions': {
+            'Au': {'frac_coords': [[0.0, 0.0, 0.0], [0.5, 0.5, 0.0]], 'mass': 196.97},
+            'Te': {'frac_coords': [[0.69, 0.0, 0.29], [0.31, 0.0, 0.71]], 'mass': 127.60}
+        }
+    }
+
+print("="*70 + "\n")

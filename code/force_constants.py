@@ -4,7 +4,7 @@ Converted from readFC.m - reads .fc files from DFT calculations
 """
 
 import numpy as np
-from constants import const
+from .constants import const
 import re
 
 class ForceConstants:
