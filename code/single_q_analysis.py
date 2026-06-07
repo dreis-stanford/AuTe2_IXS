@@ -88,13 +88,6 @@ class SingleQAnalyzer:
         Q_mag = np.linalg.norm(Q_cart)
 
         # For longitudinal character, use reduced q (phonon wavevector)
-        Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
-        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
-
-        # For longitudinal character, use reduced q (phonon wavevector)
-        Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
-        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
-        
         result['Q_cart'] = Q_cart
         result['Q_mag'] = Q_mag
         
@@ -107,6 +100,7 @@ class SingleQAnalyzer:
         
         Q_cart_G = Q_prim_rounded @ self.xtal.b_l
         Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
+        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
         
         result['Q_reduced_prim'] = Q_prim_reduced
         result['Q_reduced_conv'] = Q_conv_reduced
