@@ -41,7 +41,7 @@ class SingleQAnalyzer:
         self.kT_THz = kT_THz
         
     def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True, 
-                print_detailed=False, threshold_L=0.7, threshold_T=0.3):
+                print_detailed=False, threshold_L=0.99, threshold_T=0.01):
         """
         Analyze phonons and IXS at single Q-point
         
@@ -163,6 +163,19 @@ class SingleQAnalyzer:
         
         # Classify modes
         pol_type = []
+        for L in long_char:
+            if np.isnan(L):
+                pol_type.append('Undefined')
+            elif L < threshold_T:
+                pol_type.append('Transverse')
+            elif L > threshold_L:
+                pol_type.append('Longitudinal')
+            elif L < 0.3:
+                pol_type.append('Mixed (T)')
+            elif L > 0.7:
+                pol_type.append('Mixed (L)')
+            else:
+                pol_type.append('Mixed')
         for L in long_char:
             if np.isnan(L):
                 pol_type.append('Undefined')
