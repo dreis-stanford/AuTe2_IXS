@@ -70,6 +70,8 @@ DFT_DATA_DIR = "data/dft"
 
 # Energy unit for phonon frequencies
 FREQ_UNIT = "meV"  # Options: "meV", "THz", "cm-1"
+# Q-point coordinate system
+Q_COORDINATE_SYSTEM = "conventional"  # Options: "primitive", "conventional", "cartesian"
 
 # Q-point mesh for phonon interpolation
 Q_MESH = (50, 50, 50)
@@ -85,8 +87,7 @@ TEMPERATURE = 300.0
 ENERGY_RESOLUTION = 1.5
 
 # Include Debye-Waller factor
-USE_DEBYE_WALLER = True
-
+USE_DEBYE_WALLER = False # Not yet implemented - TODO
 # ============================================================================
 # RECIPROCAL SPACE EXPLORATION
 # ============================================================================
@@ -181,10 +182,10 @@ def print_config():
     
     print("\n[Phonon Calculations]")
     print(f"  Frequency unit: {FREQ_UNIT}")
+    print(f"  Q coordinate system: {Q_COORDINATE_SYSTEM}")
     print(f"  Q-mesh: {Q_MESH}")
     print(f"  Temperature: {TEMPERATURE} K")
-    print(f"  Debye-Waller: {USE_DEBYE_WALLER}")
-    
+    print(f"  Debye-Waller: {USE_DEBYE_WALLER} (not yet implemented)")    
     print("="*70 + "\n")
 
 # Print config on import for visibility
