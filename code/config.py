@@ -43,6 +43,15 @@ DEFAULT_AGAP_H = 60  # Horizontal gap
 # SAMPLE PARAMETERS - AuTe2
 # ============================================================================
 
+# IMPORTANT: We maintain TWO structures for different purposes:
+# 1. DFT structure: For phonon eigenvectors and one-phonon structure factors
+# 2. Experimental structure: For Bragg/satellite positions and diffractometer geometry
+
+# Which structure to use for what:
+PHONON_STRUCTURE = 'DFT'          # Use DFT positions for phonon calculations
+DIFFRACTION_STRUCTURE = 'EXPERIMENTAL'  # Use experimental for Bragg geometry
+
+
 # Lattice parameters for AuTe2 (to be refined from experiment)
 # These are initial values - will be updated after orientation matrix refinement
 # Lattice parameters for AuTe2
@@ -60,25 +69,34 @@ LATTICE_PARAMS = {
 # C2/m space group, average structure
 # From Reithmayer et al., Acta Crystallographica B49, 6 (1993)
 EXPERIMENTAL_STRUCTURE = {
-    'Au': {
-        'wyckoff': '2a',  # Second position is from C-centering
-        'positions': [
-            [0.0, 0.0, 0.0],      # 2a
-            [0.5, 0.5, 0.0],      # 2d
-        ],
-        'occupancy': 1.0,
-        'mass': 196.97  # amu
+    'source': 'Reithmayer et al., Acta Cryst. B49, 6 (1993)',
+    'lattice': {
+        'a': 7.189,     # Angstroms
+        'b': 4.407,
+        'c': 5.069,
+        'alpha': 90.0,  # degrees
+        'beta': 89.96,
+        'gamma': 90.0
     },
-    'Te': {
-        'wyckoff': '4i',
-        'positions': [
-            [ 0.6884, 0.0,  0.2878],
-            [-0.6884, 0.0, -0.2878],
-            [ 0.1884, 0.5,  0.2878],  # +[1/2, 1/2, 0]
-            [ 0.8116, 0.5,  0.7122],  # symmetry equivalent
-        ],
-        'occupancy': 1.0,
-        'mass': 127.60  # amu
+    'positions': {
+        'Au': {
+            'wyckoff': '2a',
+            'frac_coords': [
+                [0.0, 0.0, 0.0],
+                [0.5, 0.5, 0.0],  # C-centering
+            ],
+            'mass': 196.97
+        },
+        'Te': {
+            'wyckoff': '4i',
+            'frac_coords': [
+                [ 0.6884, 0.0,  0.2878],
+                [-0.6884, 0.0, -0.2878],
+                [ 0.1884, 0.5,  0.2878],
+                [ 0.8116, 0.5,  0.7122],
+            ],
+            'mass': 127.60
+        }
     }
 }
 
@@ -312,3 +330,34 @@ else:
     }
 
 print("="*70 + "\n")
+
+# ============================================================================
+# HELPER FUNCTIONS FOR STRUCTURE ACCESS
+# ============================================================================
+
+def get_phonon_structure():
+    """Get structure to use for phonon/eigenvector calculations"""
+    if PHONON_STRUCTURE == 'DFT':
+        return DFT_STRUCTURE
+    elif PHONON_STRUCTURE == 'EXPERIMENTAL':
+        print("WARNING: Using experimental structure for phonons - eigenvectors may be inconsistent!")
+        return EXPERIMENTAL_STRUCTURE
+    else:
+        raise ValueError(f"Unknown phonon structure: {PHONON_STRUCTURE}")
+
+def get_diffraction_structure():
+    """Get structure to use for Bragg peak/satellite calculations"""
+    if DIFFRACTION_STRUCTURE == 'DFT':
+        return DFT_STRUCTURE
+    elif DIFFRACTION_STRUCTURE == 'EXPERIMENTAL':
+        return EXPERIMENTAL_STRUCTURE
+    else:
+        raise ValueError(f"Unknown diffraction structure: {DIFFRACTION_STRUCTURE}")
+
+def get_structure_info():
+    """Print which structures are being used"""
+    print("\nStructure Usage:")
+    print(f"  Phonons/Eigenvectors: {PHONON_STRUCTURE}")
+    print(f"    Source: {get_phonon_structure()['source']}")
+    print(f"  Bragg/Diffractometer: {DIFFRACTION_STRUCTURE}")
+    print(f"    Source: {get_diffraction_structure()['source']}")
