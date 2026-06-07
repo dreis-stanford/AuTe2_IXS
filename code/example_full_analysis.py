@@ -3,7 +3,7 @@ Complete example: AuTe2 IXS analysis with cross-sections
 """
 
 from sixcircle_minimal import init_sixcircle
-from aute2_structure import AuTe2
+from .aute2_structure import AuTe2
 from ixs_cross_section import create_ixs_calculator
 import numpy as np
 import matplotlib.pyplot as plt

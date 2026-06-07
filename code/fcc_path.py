@@ -4,7 +4,7 @@ Define in conventional cubic reciprocal coordinates, then convert to primitive
 """
 
 import numpy as np
-from fcc_structure import fcc_conv2prim_k
+from .fcc_structure import fcc_conv2prim_k
 
 
 def get_fcc_high_symmetry_points_conventional():

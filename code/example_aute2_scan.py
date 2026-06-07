@@ -3,7 +3,7 @@ Example: Planning an IXS scan for AuTe2
 """
 
 from sixcircle_minimal import init_sixcircle
-from aute2_structure import AuTe2
+from .aute2_structure import AuTe2
 
 print("=" * 60)
 print("AuTe2 IXS Measurement Planning")

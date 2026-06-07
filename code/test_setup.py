@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
-from aute2_structure import AuTe2
+from .aute2_structure import AuTe2
 import numpy as np
 import xraylib
 

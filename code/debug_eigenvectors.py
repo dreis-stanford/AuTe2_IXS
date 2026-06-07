@@ -9,7 +9,7 @@ sys.path.insert(0, 'code')
 
 from .force_constants import ForceConstants
 from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
-from aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
+from .aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
 
 # Load structure
 fc_file = "data/AuTe_2_m.fc"

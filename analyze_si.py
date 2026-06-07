@@ -1,12 +1,9 @@
-#!/usr/bin/env python
-"""Quick launcher for interactive Silicon analysis"""
-import sys
-import os
+#!/usr/bin/env python3
+"""
+Interactive analysis launcher for Silicon phonons (reference material)
+"""
 
-# Add code directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
+from code.si_analysis import interactive_mode as si_interactive_mode
 
-from single_q_analysis_si import interactive_mode
-
-if __name__ == "__main__":
-    interactive_mode()
+if __name__ == '__main__':
+    si_interactive_mode()

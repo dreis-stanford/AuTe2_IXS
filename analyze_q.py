@@ -1,12 +1,9 @@
-#!/usr/bin/env python
-"""Quick launcher for interactive Q-point analysis"""
-import sys
-import os
+#!/usr/bin/env python3
+"""
+Interactive analysis launcher for AuTe2 phonons at single Q-points
+"""
 
-# Add code directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
+from code.single_q_analysis import interactive_mode
 
-from single_q_analysis import interactive_mode
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     interactive_mode()
