@@ -440,6 +440,59 @@ def interactive_mode():
                 print(f"\n✗ {e}\n")
             continue
         
+        elif user_input.lower() == 'move':
+            # Move diffractometer - REAL MOTION!
+            if current_q is None:
+                print("\n⚠ Enter a Q point first\n")
+                continue
+            try:
+                sixc = SixCircleInterface()
+                if sixc.simulation_mode:
+                    print("\n⚠ In simulation mode - cannot move\n")
+                    continue
+                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                print("\n" + "="*70)
+                print("⚠ WARNING: Will MOVE diffractometer!")
+                print("="*70)
+                print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
+                confirm = input("\nType 'yes' to confirm: ").strip().lower()
+                if confirm != 'yes':
+                    print("Cancelled\n")
+                    continue
+                print("\nMoving...")
+                sixc.move_to_hkl(tuple(Q_conv), check_only=False)
+                print("✓ Complete\n")
+            except Exception as e:
+                print(f"\n✗ {e}\n")
+            continue
+        elif user_input.lower().startswith('sixc '):
+            # Pass command to sixcircle
+            cmd = user_input[5:].strip()  # Remove 'sixc ' prefix
+            if not cmd:
+                print("\n⚠ Usage: sixc <command>\n")
+                print("  Examples: sixc wh, sixc pa, sixc or_check\n")
+                continue
+            try:
+                sixc = SixCircleInterface()
+                if sixc.simulation_mode:
+                    print("\n⚠ Simulation mode - sixcircle commands not available\n")
+                    continue
+                if not sixc.sixc:
+                    print("\n⚠ Sixcircle not loaded\n")
+                    continue
+                print("")
+                # Execute the command in sixcircle's namespace
+                try:
+                    exec(f"sixc.sixc.{cmd}", {'sixc': sixc})
+                except AttributeError:
+                    # Try as direct function call
+                    exec(cmd, sixc.sixc.__dict__)
+                print("")
+            except Exception as e:
+                print(f"\n✗ Error: {e}\n")
+                print("  Try: sixc wh() or sixc pa()\n")
+            continue
+        
         try:
             Q = np.array([float(x) for x in user_input.split()])
             

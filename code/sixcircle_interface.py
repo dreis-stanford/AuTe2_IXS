@@ -185,10 +185,8 @@ class SixCircleInterface:
         check_only : If True, only calculate without moving
         """
         if self.simulation_mode:
+            # Calculate angles quietly (caller will print if desired)
             angles = self._simulate_angles(hkl)
-            print(f"\nSIMULATION: {'Would move' if not check_only else 'Angles'} to {hkl}")
-            for key, val in angles.items():
-                print(f"  {key:5s} = {val:7.3f}°")
             return angles
         
         if check_only:
