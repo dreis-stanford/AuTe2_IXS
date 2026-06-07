@@ -40,7 +40,7 @@ class SingleQAnalyzer:
         self.kT_THz = kT_THz
         
     def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True, 
-                print_detailed=False, threshold_L=0.7, threshold_T=0.3):
+                print_detailed=False, threshold_L=0.95, threshold_T=0.05):
         """
         Analyze phonons and IXS at single Q-point
         
@@ -168,6 +168,10 @@ class SingleQAnalyzer:
                 pol_type.append('Transverse')
             elif L > threshold_L:
                 pol_type.append('Longitudinal')
+            elif L < 0.3:
+                pol_type.append('Mixed (T)') 
+            elif L > 0.7:
+                pol_type.append('Mixed (L)')
             else:
                 pol_type.append('Mixed')
         
@@ -201,7 +205,7 @@ class SingleQAnalyzer:
         longitudinal_signed = np.zeros((nmodes, self.xtal.nat))
         
         for imode in range(nmodes):
-            ev_mode = ev[:, imode]
+            ev_mode = ev[:, imode, 0]
             total_ev_norm = np.linalg.norm(ev_mode)
             
             for iat in range(self.xtal.nat):
@@ -317,7 +321,8 @@ class SingleQAnalyzer:
             print(f'{i+1:2d}    {freq_data[i]:8.2f}     {long_char[i]:5.3f}   '
                   f'{ixs_s_str:9s}  {ixs_as_str:9s}  '
                   f'{atom_part[i,0]*100:4.1f} {long_sign[i,0]:+5.1f}  '
-                  f'{atom_part[i,1]*100:4.1f} {long_sign[i,1]:+5.1f}')
+                  f'{atom_part[i,1]*100:4.1f} {long_sign[i,1]:+5.1f}  '
+                  f'{pol_type[i]}')
         
         print('═'*95 + '\n')
     

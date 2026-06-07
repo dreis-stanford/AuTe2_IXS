@@ -176,15 +176,6 @@ class SingleQAnalyzer:
                 pol_type.append('Mixed (L)')
             else:
                 pol_type.append('Mixed')
-        for L in long_char:
-            if np.isnan(L):
-                pol_type.append('Undefined')
-            elif L < threshold_T:
-                pol_type.append('Transverse')
-            elif L > threshold_L:
-                pol_type.append('Longitudinal')
-            else:
-                pol_type.append('Mixed')
         
         result['pol_type'] = pol_type
         
@@ -216,7 +207,7 @@ class SingleQAnalyzer:
         longitudinal_signed = np.zeros((nmodes, self.xtal.nat))
         
         for imode in range(nmodes):
-            ev_mode = ev[:, imode]
+            ev_mode = ev[:, imode, 0]
             total_ev_norm = np.linalg.norm(ev_mode)
             
             for iat in range(self.xtal.nat):
