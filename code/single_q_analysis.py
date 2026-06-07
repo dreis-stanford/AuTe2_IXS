@@ -99,7 +99,8 @@ class SingleQAnalyzer:
         
         Q_cart_G = Q_prim_rounded @ self.xtal.b_l
         Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
-        
+        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
+
         result['Q_reduced_prim'] = Q_prim_reduced
         result['Q_reduced_conv'] = Q_conv_reduced
         result['Q_reduced_cart'] = Q_cart_reduced
@@ -130,8 +131,8 @@ class SingleQAnalyzer:
         long_char = np.zeros(nmodes)
         Q_hat = None
         
-        if Q_mag > 1e-6:
-            Q_hat = Q_cart / Q_mag
+        if Q_mag_reduced > 1e-6:
+            Q_hat = Q_cart_reduced / Q_mag_reduced
             
             for imode in range(nmodes):
                 ev_mode = ev[:, imode, 0]
