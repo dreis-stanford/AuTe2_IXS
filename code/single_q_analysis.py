@@ -41,7 +41,7 @@ class SingleQAnalyzer:
         self.kT_THz = kT_THz
         
     def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True, 
-                print_detailed=False, threshold_L=0.99, threshold_T=0.01):
+                print_detailed=False, threshold_L=0.7, threshold_T=0.3):
         """
         Analyze phonons and IXS at single Q-point
         
@@ -86,6 +86,14 @@ class SingleQAnalyzer:
         # Convert to Cartesian (2π/Å)
         Q_cart = Q_prim @ self.xtal.b_l
         Q_mag = np.linalg.norm(Q_cart)
+
+        # For longitudinal character, use reduced q (phonon wavevector)
+        Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
+        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
+
+        # For longitudinal character, use reduced q (phonon wavevector)
+        Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
+        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
         
         result['Q_cart'] = Q_cart
         result['Q_mag'] = Q_mag
@@ -99,8 +107,7 @@ class SingleQAnalyzer:
         
         Q_cart_G = Q_prim_rounded @ self.xtal.b_l
         Q_cart_reduced = Q_prim_reduced @ self.xtal.b_l
-        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
-
+        
         result['Q_reduced_prim'] = Q_prim_reduced
         result['Q_reduced_conv'] = Q_conv_reduced
         result['Q_reduced_cart'] = Q_cart_reduced
@@ -170,10 +177,6 @@ class SingleQAnalyzer:
                 pol_type.append('Transverse')
             elif L > threshold_L:
                 pol_type.append('Longitudinal')
-            elif L < 0.3:
-                pol_type.append('Mixed (T)')
-            elif L > 0.7:
-                pol_type.append('Mixed (L)')
             else:
                 pol_type.append('Mixed')
         
@@ -202,12 +205,12 @@ class SingleQAnalyzer:
         # Calculate signed longitudinal components (Q·e for each atom)
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
-        Q_hat = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
+        Q_hat = Q_cart_reduced / Q_mag_reduced if Q_mag > 1e-10 else np.zeros(3)
         
         longitudinal_signed = np.zeros((nmodes, self.xtal.nat))
         
         for imode in range(nmodes):
-            ev_mode = ev[:, imode, 0]
+            ev_mode = ev[:, imode]
             total_ev_norm = np.linalg.norm(ev_mode)
             
             for iat in range(self.xtal.nat):
@@ -486,13 +489,37 @@ def interactive_mode():
                     print("\n⚠ Sixcircle not loaded\n")
                     continue
                 print("")
-                # Execute the command in sixcircle's namespace
-                try:
-                    exec(f"sixc.sixc.{cmd}", {'sixc': sixc})
-                except AttributeError:
-                    # Try as direct function call
-                    exec(cmd, sixc.sixc.__dict__)
-                print("")
+                # Import whitelist from config
+                from config import SIXCIRCLE_ALLOWED_COMMANDS, SIXCIRCLE_COMMAND_HELP
+                
+                # Parse command
+                cmd_clean = cmd.strip()
+                cmd_name = cmd_clean.split('(')[0].strip()
+                
+                # Check if command is allowed
+                if cmd_name not in SIXCIRCLE_ALLOWED_COMMANDS:
+                    print(f"⚠ Command '{cmd_name}' not allowed")
+                    print(SIXCIRCLE_COMMAND_HELP)
+                    print("")
+                    continue
+                
+                # Execute whitelisted command
+                method_name, needs_args = SIXCIRCLE_ALLOWED_COMMANDS[cmd_name]
+                method = getattr(sixc.sixc, method_name, None)
+                
+                if method is None:
+                    print(f"⚠ Method '{method_name}' not found in sixcircle")
+                    print("")
+                    continue
+                
+                # Call method
+                if needs_args:
+                    print(f"⚠ Commands with arguments not yet implemented")
+                    print(f"  '{cmd_name}' requires arguments")
+                else:
+                    result = method() if callable(method) else method
+                    if result is not None:
+                        print(result)
             except Exception as e:
                 print(f"\n✗ Error: {e}\n")
                 print("  Try: sixc wh() or sixc pa()\n")

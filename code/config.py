@@ -40,6 +40,37 @@ DEFAULT_AGAP_V = 60  # Vertical gap
 DEFAULT_AGAP_H = 60  # Horizontal gap
 
 # ============================================================================
+# SIXCIRCLE COMMAND WHITELIST (for interactive mode security)
+# ============================================================================
+
+# Allowed sixcircle commands for interactive mode
+# Format: 'command_name': ('method_name', needs_args)
+SIXCIRCLE_ALLOWED_COMMANDS = {
+    'wh': ('wh', False),      # where: show current position
+    'pa': ('pa', False),      # show all parameters
+    'ca': ('ca', False),      # show calculated positions
+    'or0': ('or0', False),    # show first orientation reflection
+    'or1': ('or1', False),    # show second orientation reflection
+    'setlat': ('setlat', True),  # set lattice (requires args)
+    'setaz': ('setaz', True),    # set azimuthal reference
+    'freeze': ('freeze', True),  # freeze angles
+    'unfreeze': ('unfreeze', True),  # unfreeze angles
+}
+
+# Help text for sixcircle commands
+SIXCIRCLE_COMMAND_HELP = """
+Available sixcircle commands:
+  wh         - Show current diffractometer position
+  pa         - Show all parameters
+  ca         - Show calculated angle positions
+  or0        - Show first orientation reflection
+  or1        - Show second orientation reflection
+  
+Type 'sixc <command>' to execute
+"""
+
+
+# ============================================================================
 # SAMPLE PARAMETERS - AuTe2
 # ============================================================================
 
