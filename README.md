@@ -1,43 +1,46 @@
-# AuTe2 IXS Analysis Project
+# AuTe2 IXS Experiment Planning
 
-Python tools for calculating phonon dispersions and Inelastic X-ray Scattering (IXS) cross-sections.
+Python tools for planning Inelastic X-ray Scattering (IXS) experiments on AuTe₂ using DFT phonon predictions and six-circle diffractometer control.
 
-## Materials
+## Overview
 
-- AuTe2: Base-centered monoclinic (C2/m), 3 atoms/cell, 9 phonon branches
-- Silicon: FCC diamond structure, 2 atoms/cell, 6 phonon branches
+This project integrates:
+- DFT phonon calculations to predict phonon dispersions and eigenvectors
+- Sixcircle diffractometer interface for experiment planning at SPring-8
+- Modulated structure handling for CDW satellite reflections
+- Q-point optimization to maximize information from measurements
 
 ## Quick Start
 
-### AuTe2 Interactive Analysis
-python analyze_q.py
+Interactive Analysis:
+    python analyze_q.py
+    python analyze_si.py
+    python test_integration.py
 
-Commands: Enter Q as "0.5 0 0", type "prim"/"conv"/"cart" for coordinates, "meV"/"THz"/"invcm" for units
+## Installation
 
-### Silicon Interactive Analysis  
-python analyze_si.py
+Requirements: numpy scipy matplotlib phonopy
 
-## Key Files
+For SPring-8 users, edit code/config.py to set SIXCIRCLE_PATH
 
-- code/single_q_analysis.py - Interactive IXS for AuTe2
-- code/phonons.py - Phonon calculations
-- code/ixs.py - IXS cross-sections
+## Project Structure
+
+- code/config.py - Configuration
+- code/sixcircle_interface.py - Diffractometer control  
+- code/modulated_structure.py - Satellite reflections
+- code/q_optimizer.py - Q-point optimization
 - analyze_q.py - AuTe2 launcher
-- analyze_si.py - Silicon launcher
+- test_integration.py - Integration tests
 
-## Recent Work
+## Recent Updates
 
-Just added:
-1. Signed longitudinal components (Q·e per atom) - shows direction along Q
-2. Frequency unit switching (meV/THz/cm-1)
+Sixcircle Integration - 1,184+ lines of new code
+- Diffractometer interface for SPring-8 BL43LXU
+- Modulated structure and satellite handling
+- Q-point optimization
+- Simulation mode for testing
 
-## To-Do
+## Materials
 
-1. Force constant symmetry validation
-2. Debye-Waller factors
-3. 6-circle diffractometer angles
-4. Investigate Si dispersion discrepancies
-
-## For New Sessions
-
-Tell me: "Continuing AuTe2 IXS project" and show "git log --oneline -5"
+AuTe2: Monoclinic C2/m, 3 atoms/cell, 9 phonon branches
+Silicon: FCC diamond, 2 atoms/cell, 6 phonon branches
