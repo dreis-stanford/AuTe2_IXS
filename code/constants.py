@@ -40,8 +40,8 @@ class Constants:
     Ha = Me * alpha**2  # Hartree in eV (~27.2 eV)
     
     # Frequency unit conversions
-    meV2THz = 1000.0 / THz2eV  # meV to THz
-    THz2meV = THz2eV / 1000.0   # THz to meV
+    meV2THz = 1.0 / (THz2eV * 1000.0)  # meV to THz
+    THz2meV = THz2eV * 1000.0   # THz to meV
     invCm2meV = 0.12398419843   # cm^-1 to meV
     meV2invCm = 1.0 / invCm2meV # meV to cm^-1
     

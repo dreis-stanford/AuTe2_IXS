@@ -373,7 +373,7 @@ def interactive_mode():
     analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
     
     # Default coordinate system
-    coord_system = 'primitive'
+    coord_system = 'conventional'
     freq_unit = 'meV'
     
     print("Instructions:")
