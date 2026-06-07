@@ -226,6 +226,13 @@ def print_config():
     print("\n[Modulation]")
     print(f"  q_mod = ({MODULATION_VECTOR[0]:.3f}, {MODULATION_VECTOR[1]:.3f}, {MODULATION_VECTOR[2]:.3f})")
     
+    print("\n[Default Crystal]")
+    print(f"  Using: {DEFAULT_CRYSTAL} structure")
+    
+    print("\n[Sample Orientation]")
+    print(f"  Surface normal: {SURFACE_NORMAL} (conv. r.l.u.)")
+    print(f"  Azimuthal ref:  {AZIMUTHAL_REFERENCE} (conv. r.l.u.)")
+    
     print("\n[Phonon Calculations]")
     print(f"  Frequency unit: {FREQ_UNIT}")
     print(f"  Q coordinate system: {Q_COORDINATE_SYSTEM}")
@@ -361,3 +368,93 @@ def get_structure_info():
     print(f"    Source: {get_phonon_structure()['source']}")
     print(f"  Bragg/Diffractometer: {DIFFRACTION_STRUCTURE}")
     print(f"    Source: {get_diffraction_structure()['source']}")
+
+# ============================================================================
+# DEFAULT CRYSTAL SETTING
+# ============================================================================
+
+# Which crystal structure to use for calculations
+# This affects which lattice is used for sixcircle and reciprocal space calculations
+DEFAULT_CRYSTAL = 'EXPERIMENTAL'  # Options: 'DFT', 'EXPERIMENTAL'
+
+def get_default_lattice():
+    """
+    Get the default lattice parameters for diffractometer calculations
+    
+    Returns:
+    --------
+    dict with lattice parameters
+    """
+    if DEFAULT_CRYSTAL == 'DFT':
+        return DFT_STRUCTURE['lattice']
+    elif DEFAULT_CRYSTAL == 'EXPERIMENTAL':
+        return EXPERIMENTAL_STRUCTURE['lattice']
+    else:
+        raise ValueError(f"Unknown default crystal: {DEFAULT_CRYSTAL}")
+
+def set_default_crystal(crystal: str):
+    """
+    Set which crystal structure to use as default
+    
+    Parameters:
+    -----------
+    crystal : 'DFT' or 'EXPERIMENTAL'
+    """
+    global DEFAULT_CRYSTAL
+    if crystal.upper() not in ['DFT', 'EXPERIMENTAL']:
+        raise ValueError("crystal must be 'DFT' or 'EXPERIMENTAL'")
+    DEFAULT_CRYSTAL = crystal.upper()
+    print(f"✓ Default crystal set to {DEFAULT_CRYSTAL}")
+
+# ============================================================================
+# SAMPLE ORIENTATION / AZIMUTHAL REFERENCE
+# ============================================================================
+
+# Surface normal (sample normal for thin film or preferred scattering geometry)
+# Defined in conventional reciprocal lattice units
+SURFACE_NORMAL = (0, 0, 1)  # Along c-axis (conventional)
+
+# Azimuthal reference direction (in-plane reference)
+# Defined in conventional reciprocal lattice units
+AZIMUTHAL_REFERENCE = (0, 1, 0)  # Along b-axis (conventional)
+
+# Note: For AuTe2 conventional cell (monoclinic C2/m):
+#   α = 90° (b⊥c), β = 89.96° (a⊥c nearly), γ = 90° (a⊥b)
+#   So b and c are perpendicular (suitable for azimuthal reference)
+
+def get_surface_normal():
+    """Get surface normal in conventional r.l.u."""
+    return SURFACE_NORMAL
+
+def get_azimuthal_reference():
+    """Get azimuthal reference in conventional r.l.u."""
+    return AZIMUTHAL_REFERENCE
+
+def set_sample_orientation(surface_normal=None, azimuthal_ref=None):
+    """
+    Set sample orientation for diffractometer
+    
+    Parameters:
+    -----------
+    surface_normal : tuple (h, k, l) in conventional r.l.u.
+    azimuthal_ref : tuple (h, k, l) in conventional r.l.u.
+    """
+    global SURFACE_NORMAL, AZIMUTHAL_REFERENCE
+    
+    if surface_normal is not None:
+        SURFACE_NORMAL = tuple(surface_normal)
+        print(f"✓ Surface normal set to {SURFACE_NORMAL}")
+    
+    if azimuthal_ref is not None:
+        AZIMUTHAL_REFERENCE = tuple(azimuthal_ref)
+        print(f"✓ Azimuthal reference set to {AZIMUTHAL_REFERENCE}")
+    
+    # Check if perpendicular
+    import numpy as np
+    if surface_normal is not None and azimuthal_ref is not None:
+        dot = np.dot(surface_normal, azimuthal_ref)
+        if abs(dot) < 1e-6:
+            print("  ✓ Vectors are perpendicular")
+        else:
+            print(f"  ⚠ Warning: Vectors not perpendicular (dot product = {dot})")
+
