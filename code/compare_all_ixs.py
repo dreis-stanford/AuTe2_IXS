@@ -7,8 +7,8 @@ import numpy as np
 import sys
 sys.path.insert(0, 'code')
 
-from force_constants import ForceConstants
-from phonons import calc_Dq, calc_freq_eig, convert_frequencies
+from .force_constants import ForceConstants
+from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
 from form_factors import CalcAtomicfQ
 from ixs import calc_ixs
 

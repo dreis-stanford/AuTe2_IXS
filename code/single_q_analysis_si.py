@@ -5,9 +5,9 @@ Matches MATLAB calcIXS_single_Q_Silicon.m and interactive script
 
 import numpy as np
 import sys
-from constants import const
-from force_constants import ForceConstants
-from phonons import calc_Dq, calc_freq_eig, convert_frequencies
+from .constants import const
+from .force_constants import ForceConstants
+from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
 from form_factors import CalcAtomicfQ
 from ixs import calc_ixs
 from fcc_structure import fcc_conv2prim_k, fcc_prim2conv_k

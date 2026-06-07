@@ -6,8 +6,8 @@ import numpy as np
 import sys
 sys.path.insert(0, 'code')
 
-from force_constants import ForceConstants
-from phonons import calc_Dq, calc_freq_eig, convert_frequencies
+from .force_constants import ForceConstants
+from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
 
 # Load structure
 fc_file = "data/AuTe_2_m.fc"

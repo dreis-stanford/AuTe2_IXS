@@ -6,7 +6,7 @@ Converted from calcDq.m and CalcFreqEig.m
 import numpy as np
 from scipy.linalg import eigh
 from scipy.optimize import linear_sum_assignment
-from constants import const
+from .constants import const
 
 def calc_Dq(q_pts, uvw, IFC, masses):
     """

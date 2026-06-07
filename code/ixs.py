@@ -4,7 +4,7 @@ Converted from MATLAB CalcIXS.m
 """
 
 import numpy as np
-from constants import const
+from .constants import const
 
 def calc_ixs(w, ev, Q_rlu, b_l, xs, fQ, masses, kT, 
              units='arbitrary', per_steradian=True):

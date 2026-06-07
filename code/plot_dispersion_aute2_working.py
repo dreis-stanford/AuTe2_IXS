@@ -5,8 +5,8 @@ Converted from MATLAB dispersion plotting script
 
 import numpy as np
 import matplotlib.pyplot as plt
-from force_constants import ForceConstants
-from phonons import calc_Dq, calc_freq_eig, convert_frequencies, generate_bz_grid
+from .force_constants import ForceConstants
+from .phonons import calc_Dq, calc_freq_eig, convert_frequencies, generate_bz_grid
 
 def plot_aute2_dispersion(fc_file='data/AuTe_2_m.fc', n_points=201, show=True, block=False):
     """

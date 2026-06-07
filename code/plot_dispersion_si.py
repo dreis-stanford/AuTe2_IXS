@@ -5,8 +5,8 @@ Converted from test_silicon.py for dispersion plotting
 
 import numpy as np
 import matplotlib.pyplot as plt
-from force_constants import ForceConstants
-from phonons import calc_Dq, calc_freq_eig, convert_frequencies
+from .force_constants import ForceConstants
+from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
 
 def plot_si_dispersion(fc_file='data/Test__Silicon_dispersion/Qgrid_888/Cg.fc', 
                        n_points=101, show=True, block=False):
