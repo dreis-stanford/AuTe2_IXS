@@ -14,6 +14,9 @@ except ImportError:
     print("Warning: xraylib not available, using built-in Cromer-Mann coefficients")
 
 
+# Module-level flag for form factor message
+_FORM_FACTOR_PRINTED = False
+
 class FormFactorCalculator:
     """
     Calculate atomic form factors f(Q)
@@ -59,7 +62,10 @@ class FormFactorCalculator:
         if self.use_xraylib:
             print("Using xraylib for form factors")
         else:
-            print("Using built-in Cromer-Mann coefficients")
+            global _FORM_FACTOR_PRINTED
+            if not _FORM_FACTOR_PRINTED:
+                print("Using built-in Cromer-Mann coefficients")
+                _FORM_FACTOR_PRINTED = True
     
     def calc_f(self, Q, symbol, scale=1.0):
         """

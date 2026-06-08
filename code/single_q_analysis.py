@@ -151,8 +151,9 @@ class SingleQAnalyzer:
         # Calculate longitudinal/transverse character
         long_char = np.zeros(nmodes)
         Q_hat = None
+        at_gamma = Q_mag_reduced < 1e-6
         
-        if Q_mag_reduced > 1e-6:
+        if not at_gamma:
             Q_hat = Q_cart_reduced / Q_mag_reduced
             
             for imode in range(nmodes):
@@ -219,7 +220,7 @@ class SingleQAnalyzer:
         # Calculate signed longitudinal components (Q·e for each atom)
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
-        Q_hat = Q_cart_reduced / Q_mag_reduced if Q_mag > 1e-10 else np.zeros(3)
+        Q_hat = Q_cart_reduced / Q_mag_reduced if Q_mag_reduced > 1e-10 else np.zeros(3)
         
         longitudinal_signed = np.zeros((nmodes, self.xtal.nat))
         
@@ -230,7 +231,7 @@ class SingleQAnalyzer:
             for iat in range(self.xtal.nat):
                 e_atom = ev_mode[3*iat:3*iat+3]
                 Q_dot_e = np.real(np.vdot(Q_hat, e_atom))
-                longitudinal_signed[imode, iat] = 100 * Q_dot_e / (total_ev_norm + 1e-12)
+                longitudinal_signed[imode, iat] = 80 * Q_dot_e / (total_ev_norm + 1e-12)
         
         result['longitudinal_signed'] = longitudinal_signed
         
@@ -369,16 +370,16 @@ class SingleQAnalyzer:
     def _print_array_results(self, array_results, freq_unit='meV'):
         """Print simplified analyzer array table"""
         
-        print('\n' + '='*120)
+        print('\n' + '='*80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
         print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm⁻¹')
-        print('='*120)
+        print('='*80)
         
         # Header
         freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
         
         print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc·sr)"}')
-        print('-'*120)
+        print('-'*80)
         
         freq_key = {'meV': 'frequencies_meV', 
                    'cm-1': 'frequencies_cm',
@@ -397,22 +398,22 @@ class SingleQAnalyzer:
             print(f'{result["analyzer"]:>4s}  {Q[0]:7.3f} {Q[1]:7.3f} {Q[2]:7.3f}  '
                   f'{freq_str}  {ixs_str}')
         
-        print('='*120 + '\n')
+        print('='* 80 + '\n')
 
 
     def _print_array_results(self, array_results, freq_unit='meV'):
         """Print simplified analyzer array table"""
         
-        print('\n' + '='*120)
+        print('\n' + '='* 80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
         print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm⁻¹')
-        print('='*120)
+        print('='* 80)
         
         # Header
         freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
         
         print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc·sr)"}')
-        print('-'*120)
+        print('-'* 80)
         
         freq_key = {'meV': 'frequencies_meV', 
                    'cm-1': 'frequencies_cm',
@@ -431,116 +432,166 @@ class SingleQAnalyzer:
             print(f'{result["analyzer"]:>4s}  {Q[0]:7.3f} {Q[1]:7.3f} {Q[2]:7.3f}  '
                   f'{freq_str}  {ixs_str}')
         
-        print('='*120 + '\n')
+        print('='*80 + '\n')
 
     def _print_results(self, result, detailed=False, freq_unit='meV'):
-        """Print analysis results"""
-        
-        print('\n' + '╔' + '='*64 + '╗')
-        print('║  IXS Analysis at Single Q Point - AuTe₂' + ' '*24 + '║')
-        print('╚' + '='*64 + '╝\n')
+        """Print analysis results - compact format"""
         
         Q_conv = result['Q_conv']
         Q_prim = result['Q_prim']
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
         
-        # Check if this is a satellite reflection
-        q_mod = self.mod_struct.q_mod
-        is_satellite = False
-        satellite_order = 0
-        Q_main = Q_conv
-        
-        # Try to determine if Q is near a satellite position
-        for m in range(-3, 4):
-            for h in range(-3, 4):
-                for k in range(-3, 4):
-                    for l in range(-3, 4):
-                        Q_test = np.array([h, k, l]) + m * q_mod
-                        if np.linalg.norm(Q_conv - Q_test) < 0.01:
-                            is_satellite = (m != 0)
-                            satellite_order = m
-                            Q_main = np.array([h, k, l])
-                            break
-        
-        if is_satellite:
-            print(f'Q (conventional): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}] (r.l.u.) ★ SATELLITE m={satellite_order:+d}')
-            print(f'  Main peak:      [{Q_main[0]:.0f}, {Q_main[1]:.0f}, {Q_main[2]:.0f}]')
-            print(f'  q_mod:          [{q_mod[0]:.4f}, {q_mod[1]:.4f}, {q_mod[2]:.4f}]')
-        else:
-            print(f'Q (conventional): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}] (r.l.u.)')
-        print(f'Q (primitive):    [{Q_prim[0]:.4f}, {Q_prim[1]:.4f}, {Q_prim[2]:.4f}] (r.l.u.)')
-        print(f'Q (Cartesian):    [{Q_cart[0]:.4f}, {Q_cart[1]:.4f}, {Q_cart[2]:.4f}] (2π/Å)')
-        print(f'|Q| = {Q_mag:.4f} (2π/Å)\n')
-        
-        Q_conv_G = result['G_conv']
-        Q_prim_G = result['G_prim']
-        Q_cart_G = result['G_cart']
-        
-        print('Nearest reciprocal lattice vector G:')
-        print(f'  G (conventional): [{Q_conv_G[0]:.0f}, {Q_conv_G[1]:.0f}, {Q_conv_G[2]:.0f}] (r.l.u.)')
-        print(f'  G (primitive):    [{Q_prim_G[0]:.0f}, {Q_prim_G[1]:.0f}, {Q_prim_G[2]:.0f}] (r.l.u.)')
-        print(f'  G (Cartesian):    [{Q_cart_G[0]:.4f}, {Q_cart_G[1]:.4f}, {Q_cart_G[2]:.4f}] (2π/Å)\n')
-        
-        Q_conv_red = result['Q_reduced_conv']
-        Q_prim_red = result['Q_reduced_prim']
-        Q_cart_red = result['Q_reduced_cart']
-        
-        print('Reduced q = Q - G (first Brillouin zone):')
-        print(f'  q (conventional): [{Q_conv_red[0]:.4f}, {Q_conv_red[1]:.4f}, {Q_conv_red[2]:.4f}] (r.l.u.)')
-        print(f'  q (primitive):    [{Q_prim_red[0]:.4f}, {Q_prim_red[1]:.4f}, {Q_prim_red[2]:.4f}] (r.l.u.)')
-        print(f'  q (Cartesian):    [{Q_cart_red[0]:.4f}, {Q_cart_red[1]:.4f}, {Q_cart_red[2]:.4f}] (2π/Å)')
-        print(f'  |q| = {np.linalg.norm(Q_cart_red):.4f} (2π/Å)\n')
-        
-        # Temperature
+        # Temperature and form factors
         kT_K = self.kT_THz * const.THz2meV / 1000 / 8.617333262e-5
-        print(f'Temperature: {self.kT_THz:.1f} THz ({kT_K:.1f} K)\n')
+        print(f'\nT={kT_K:.0f}K  '
+              f'sin(θ)/λ={result["Q_sinThOverLambda"]:.4f} Å⁻¹  '
+              f'f(Au)={result["form_factors"]["Au"]:.1f}  '
+              f'f(Te)={result["form_factors"]["Te"]:.1f}')
         
-        # Form factors
-        print('Form factors:')
-        print(f'  sin(θ)/λ = {result["Q_sinThOverLambda"]:.4f} Å⁻¹')
-        print(f'  f(Q) Au:  {result["form_factors"]["Au"]:.2f} (Z=79)')
-        print(f'  f(Q) Te:  {result["form_factors"]["Te"]:.2f} (Z=52)\n')
+        # Calculate structure factor for elastic scattering
+        # F(Q) = sum_atoms f_atom(Q) * exp(2πi Q_prim · r_frac)
+        F = 0.0 + 0.0j
+        Q_prim_vec = Q_prim
         
-        print(f'Cross-section units: {result["cross_section_info"]["units"]}')
-        # DFT modulation note
-        print("\nNote: DFT uses unmodulated AuTe₂ structure (no CDW in calculation).\n")
+        # AuTe2: atom 0 is Au, atoms 1,2 are Te
+        f_Au = result["form_factors"]["Au"]
+        f_Te = result["form_factors"]["Te"]
         
-        # Mode table
-        print('═'*95)
-        # Choose frequency unit
+        for iat in range(self.xtal.nat):
+            r_frac = self.xtal.xs[iat]  # Fractional coordinates
+            phase = 2 * np.pi * np.dot(Q_prim_vec, r_frac)
+            
+            if iat == 0:  # Au
+                F += f_Au * np.exp(1j * phase)
+            else:  # Te
+                F += f_Te * np.exp(1j * phase)
+        
+        F_squared = np.abs(F)**2
+        
+        # Q info - 2 significant figures, two lines, just before table
+        # Check if at Gamma
+        Q_cart_reduced = result['Q_reduced_cart']
+        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
+        at_gamma = Q_mag_reduced < 1e-6
+        
+        gamma_note = "  (q at Γ)" if at_gamma else ""
+        
+        print(f'\n|Q|={Q_mag:.2f} (2π/Å)  '
+              f'Q(cart): [{Q_cart[0]:.2f}, {Q_cart[1]:.2f}, {Q_cart[2]:.2f}] (2π/Å){gamma_note}')
+        print(f'Q(conv): [{Q_conv[0]:.2f}, {Q_conv[1]:.2f}, {Q_conv[2]:.2f}] (r.l.u.)  '
+              f'Q(prim): [{Q_prim[0]:.2f}, {Q_prim[1]:.2f}, {Q_prim[2]:.2f}] (r.l.u.)')
+        
+        # Mode table with separators
         freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
         freq_data = {'meV': result['frequencies_meV'], 
                      'cm-1': result['frequencies_cm'],
                      'THz': result['frequencies_THz']}[freq_unit]
         
-        print(f'Mode  Freq({freq_label:>4s})   L-char   IXS(S)    IXS(AS)   Au%   Au‖    Te1%  Te1‖   Te2%  Te2‖   Pol')
-        print('─'*95)
+        print('\n' + '='* 80)
+        print(f'Mode  Freq({freq_label:>3s})    IXS(S)   IXS(AS)    Pol     Au:Q·e,φ     Te1:Q·e,φ    Te2:Q·e,φ')
+        print('-'* 80)
         
-        w_cm = result['frequencies_cm']
+        # Phonon modes
         w_meV = result['frequencies_meV']
         long_char = result['long_char']
         Is = result['IXS_stokes']
         Ias = result['IXS_antistokes']
-        atom_part = result['atom_participation']
-        long_sign = result['longitudinal_signed']
-        pol_type = result['pol_type']
         
-        for i in range(len(w_cm)):
-            # Format IXS values
-            ixs_s_str = self._format_xs(Is[i])
-            ixs_as_str = self._format_xs(Ias[i])
+        for i in range(len(w_meV)):
+            # Determine polarization
+            L = long_char[i]
+            if np.isnan(L):
+                pol = 'M'
+            elif L > 0.7:
+                pol = 'L'
+            elif L < 0.3:
+                pol = 'T'
+            elif L > 0.5:
+                pol = 'M(L)'
+            else:
+                pol = 'M(T)'
             
-            print(f'{i+1:2d}    {freq_data[i]:8.2f}     {long_char[i]:5.3f}   '
-                  f'{ixs_s_str:9s}  {ixs_as_str:9s}  '
-                  f'{atom_part[i,0]*100:4.1f} {long_sign[i,0]:+5.1f}  '
-                  f'{atom_part[i,1]*100:4.1f} {long_sign[i,1]:+5.1f}  '
-                  f'{atom_part[i,2]*100:4.1f} {long_sign[i,2]:+5.1f}  '
-                  f'{pol_type[i]}')
+            # Format IXS values (0.00 to 999.99)
+            # Show --- for acoustic modes at or near Γ point
+            if at_gamma and freq_data[i] < 1.0:  # Acoustic mode at Γ
+                ixs_s_str = "   ---"
+                ixs_as_str = "   ---"
+            else:
+                ixs_s = min(999.99, max(0.0, Is[i]))
+                ixs_as = min(999.99, max(0.0, Ias[i]))
+                ixs_s_str = f'{ixs_s:6.2f}'
+                ixs_as_str = f'{ixs_as:6.2f}'
+            
+            # Calculate Q·e projections for each atom
+            Q_hat_full = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
+            
+            ev_mode = result['eigenvectors'][:, i, 0]
+            ev_reshaped = ev_mode.reshape(3, self.xtal.nat)
+            
+            # Calculate Q·e for each atom (complex)
+            q_dot_e = np.zeros(self.xtal.nat, dtype=complex)
+            for iat in range(self.xtal.nat):
+                e_atom = ev_reshaped[:, iat]
+                q_dot_e[iat] = np.vdot(Q_hat_full, e_atom)
+            
+            # Find reference atom (largest |Q·e|)
+            magnitudes = np.abs(q_dot_e)
+            ref_atom = np.argmax(magnitudes)
+            ref_phase = np.angle(q_dot_e[ref_atom])
+            
+            # Calculate relative phases (degrees)
+            phases = np.angle(q_dot_e) - ref_phase
+            phases_deg = np.degrees(phases)
+            phases_deg = np.mod(phases_deg + 180, 360) - 180
+            
+            # Format eigenvector info
+            if Q_mag < 1e-10:
+                ev_str = "      ---           ---            ---"
+            else:
+                ev_parts = []
+                for iat in range(self.xtal.nat):
+                    mag = magnitudes[iat]
+                    phase = phases_deg[iat]
+                    ev_parts.append(f'{mag:4.2f},{phase:+4.0f}')
+                ev_str = '    '.join(ev_parts)
+            
+            print(f'{i+1:3d}   {freq_data[i]:7.2f}    {ixs_s_str:>6s}   {ixs_as_str:>6s}    {pol:>4s}     {ev_str}')
         
-        print('═'*95 + '\n')
+        # Elastic line with structure factor breakdown
+        print('-'* 80)
+        
+        # Calculate Q·r for each atom (for elastic scattering)
+        # Show e^(iQ·r) even at Γ (all = 1.0, phase = 0)
+        if True:  # Always calculate
+            elastic_parts = []
+            # Show e^(iQ·r) for each atom (amplitude and phase)
+            exponentials = np.zeros(self.xtal.nat, dtype=complex)
+            
+            for iat in range(self.xtal.nat):
+                r_frac = self.xtal.xs[iat]
+                phase = 2 * np.pi * np.dot(Q_prim, r_frac)
+                exponentials[iat] = np.exp(1j * phase)
+            
+            # Find reference (first atom, or could use largest)
+            ref_phase = np.angle(exponentials[0])
+            
+            for iat in range(self.xtal.nat):
+                mag = np.abs(exponentials[iat])  # Always 1.0
+                phase_rel = np.angle(exponentials[iat]) - ref_phase
+                phase_deg = np.degrees(phase_rel)
+                phase_deg = np.mod(phase_deg + 180, 360) - 180
+                elastic_parts.append(f'{mag:3.1f},{phase_deg:+4.0f}')
+            
+            elastic_str = '    '.join(elastic_parts)
+        
+        print(f'  0      0.00    |F|^2 = {F_squared:8.0f}         El.     {elastic_str}')
+        print('='* 80)
+        
+        #notes
+        print('\nNotes: IXS units: barn/(unit cell·sr);  DFT uses unmodulated structure (no CDW).')
+        print('\n' + '='* 80 + '\n')
     
-    @staticmethod
     def _format_xs(val):
         """Format cross-section value for display"""
         if val < 1e-20:
@@ -561,9 +612,9 @@ def interactive_mode():
     Matches MATLAB interactive script
     """
     
-    print("=" * 70)
+    print("=" * 80)
     print("  Interactive IXS Analysis for AuTe₂")
-    print("=" * 70)
+    print("=" * 80)
     
     # Load force constants
     fc_file = "data/AuTe_2_m.fc"
@@ -578,7 +629,7 @@ def interactive_mode():
     
     # Temperature
     kT_cm = 207  # cm⁻¹
-    kT_THz = kT_cm * const.c * 100 / 1e12
+    kT_THz = kT_cm * const.c * 80 / 1e12
     
     print(f"Temperature: {kT_cm:.1f} cm⁻¹ ({kT_THz:.2f} THz)\n")
     
@@ -602,7 +653,7 @@ def interactive_mode():
     current_q = None
     
     while True:
-        print('─' * 70)
+        print('─' * 80)
         user_input = input(f'Enter Q ({coord_system}): ').strip()
         
         # Check if user wants to quit
@@ -678,16 +729,16 @@ def interactive_mode():
                 finally:
                     sys.stdout = old_stdout
                 
-                print("\n" + "="*70)
+                print("\n" + "="* 80)
                 print("Diffractometer Angles" + (" (SIMULATION)" if sixc.simulation_mode else ""))
-                print("="*70)
+                print("="* 80)
                 Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
                 print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
                 angles = sixc.move_to_hkl(tuple(Q_conv), check_only=True)
                 print("\nAngles:")
                 for key, val in angles.items():
                     print(f"  {key:5s} = {val:7.3f}°")
-                print("="*70 + "\n")
+                print("="* 80 + "\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
             continue
@@ -703,9 +754,9 @@ def interactive_mode():
                     print("\n⚠ In simulation mode - cannot move\n")
                     continue
                 Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
-                print("\n" + "="*70)
+                print("\n" + "="* 80)
                 print("⚠ WARNING: Will MOVE diffractometer!")
-                print("="*70)
+                print("="* 80)
                 print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
                 confirm = input("\nType 'yes' to confirm: ").strip().lower()
                 if confirm != 'yes':
@@ -816,9 +867,9 @@ def interactive_mode():
             import traceback
             traceback.print_exc()
     
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print("Session ended.")
-    print("=" * 70)
+    print("=" * 80)
 
 
 if __name__ == "__main__":
@@ -826,9 +877,9 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     
     # Test with single Q-point
-    print("=" * 70)
+    print("=" * 80)
     print("Testing Single Q-Point Analyzer")
-    print("=" * 70)
+    print("=" * 80)
     
     # Load data
     fc_file = "data/AuTe_2_m.fc"
@@ -840,7 +891,7 @@ if __name__ == "__main__":
     
     # Temperature
     kT_cm = 207
-    kT_THz = kT_cm * const.c * 100 / 1e12
+    kT_THz = kT_cm * const.c * 80 / 1e12
     
     # Create analyzer
     analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
@@ -849,8 +900,8 @@ if __name__ == "__main__":
     print("\nTest: Q = (0.5, 0, 0) primitive")
     result = analyzer.analyze([0.5, 0.0, 0.0], coords='primitive')
     
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print("Test complete! To run interactive mode:")
     print("  from single_q_analysis import interactive_mode")
     print("  interactive_mode()")
-    print("=" * 70)
+    print("=" * 80)
