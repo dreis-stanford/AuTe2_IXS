@@ -335,8 +335,8 @@ class SingleQAnalyzer:
         print(f'  f(Q) Te:  {result["form_factors"]["Te"]:.2f} (Z=52)\n')
         
         print(f'Cross-section units: {result["cross_section_info"]["units"]}')
-        print('\n⚠ Note: L-char and atomic participation % depend on eigenvector conventions.')
-        print('        These may differ from MATLAB but IXS cross-sections are exact.\n')
+        # DFT modulation note
+        print("\nNote: DFT uses unmodulated AuTe₂ structure (no CDW in calculation).\n")
         
         # Mode table
         print('═'*95)
