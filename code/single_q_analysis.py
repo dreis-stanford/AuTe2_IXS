@@ -85,7 +85,7 @@ class SingleQAnalyzer:
             'Q_conv': Q_conv
         }
         
-        # Convert to Cartesian (2π/Å)
+        # Convert to Cartesian (2pi/A)
         Q_cart = Q_prim @ self.xtal.b_l
         Q_mag = np.linalg.norm(Q_cart)
 
@@ -217,7 +217,7 @@ class SingleQAnalyzer:
         
         result['atom_participation'] = atom_participation
         
-        # Calculate signed longitudinal components (Q·e for each atom)
+        # Calculate signed longitudinal components (Q*e for each atom)
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
         Q_hat = Q_cart_reduced / Q_mag_reduced if Q_mag_reduced > 1e-10 else np.zeros(3)
@@ -372,13 +372,13 @@ class SingleQAnalyzer:
         
         print('\n' + '='*80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
-        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm⁻¹')
+        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm^-1')
         print('='*80)
         
         # Header
-        freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
+        freq_label = {'meV': 'meV', 'cm-1': 'cm^-1', 'THz': 'THz'}[freq_unit]
         
-        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc·sr)"}')
+        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc*sr)"}')
         print('-'*80)
         
         freq_key = {'meV': 'frequencies_meV', 
@@ -406,13 +406,13 @@ class SingleQAnalyzer:
         
         print('\n' + '='* 80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
-        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm⁻¹')
+        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm^-1')
         print('='* 80)
         
         # Header
-        freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
+        freq_label = {'meV': 'meV', 'cm-1': 'cm^-1', 'THz': 'THz'}[freq_unit]
         
-        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc·sr)"}')
+        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc*sr)"}')
         print('-'* 80)
         
         freq_key = {'meV': 'frequencies_meV', 
@@ -445,12 +445,12 @@ class SingleQAnalyzer:
         # Temperature and form factors
         kT_K = self.kT_THz * const.THz2meV / 1000 / 8.617333262e-5
         print(f'\nT={kT_K:.0f}K  '
-              f'sin(θ)/λ={result["Q_sinThOverLambda"]:.4f} Å⁻¹  '
+              f'sin(θ)/λ={result["Q_sinThOverLambda"]:.4f} A^-1  '
               f'f(Au)={result["form_factors"]["Au"]:.1f}  '
               f'f(Te)={result["form_factors"]["Te"]:.1f}')
         
         # Calculate structure factor for elastic scattering
-        # F(Q) = sum_atoms f_atom(Q) * exp(2πi Q_prim · r_frac)
+        # F(Q) = sum_atoms f_atom(Q) * exp(2pii Q_prim * r_frac)
         F = 0.0 + 0.0j
         Q_prim_vec = Q_prim
         
@@ -475,21 +475,21 @@ class SingleQAnalyzer:
         Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
         at_gamma = Q_mag_reduced < 1e-6
         
-        gamma_note = "  (q at Γ)" if at_gamma else ""
+        gamma_note = "  (q at Gamma)" if at_gamma else ""
         
-        print(f'\n|Q|={Q_mag:.2f} (2π/Å)  '
-              f'Q(cart): [{Q_cart[0]:.2f}, {Q_cart[1]:.2f}, {Q_cart[2]:.2f}] (2π/Å){gamma_note}')
+        print(f'\n|Q|={Q_mag:.2f} (2pi/A)  '
+              f'Q(cart): [{Q_cart[0]:.2f}, {Q_cart[1]:.2f}, {Q_cart[2]:.2f}] (2pi/A){gamma_note}')
         print(f'Q(conv): [{Q_conv[0]:.2f}, {Q_conv[1]:.2f}, {Q_conv[2]:.2f}] (r.l.u.)  '
               f'Q(prim): [{Q_prim[0]:.2f}, {Q_prim[1]:.2f}, {Q_prim[2]:.2f}] (r.l.u.)')
         
         # Mode table with separators
-        freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
+        freq_label = {'meV': 'meV', 'cm-1': 'cm^-1', 'THz': 'THz'}[freq_unit]
         freq_data = {'meV': result['frequencies_meV'], 
                      'cm-1': result['frequencies_cm'],
                      'THz': result['frequencies_THz']}[freq_unit]
         
         print('\n' + '='* 80)
-        print(f'Mode  Freq({freq_label:>3s})    IXS(S)   IXS(AS)    Pol     Au:Q·e,φ     Te1:Q·e,φ    Te2:Q·e,φ')
+        print(f'Mode  Freq({freq_label:>3s})    IXS(S)   IXS(AS)    Pol   Au:Q*e,ph   Te1:Q*e,ph  Te2:Q*e,ph')
         print('-'* 80)
         
         # Phonon modes
@@ -513,8 +513,8 @@ class SingleQAnalyzer:
                 pol = 'M(T)'
             
             # Format IXS values (0.00 to 999.99)
-            # Show --- for acoustic modes at or near Γ point
-            if at_gamma and freq_data[i] < 1.0:  # Acoustic mode at Γ
+            # Show --- for acoustic modes at or near Gamma point
+            if at_gamma and freq_data[i] < 1.0:  # Acoustic mode at Gamma
                 ixs_s_str = "   ---"
                 ixs_as_str = "   ---"
             else:
@@ -523,19 +523,19 @@ class SingleQAnalyzer:
                 ixs_s_str = f'{ixs_s:6.2f}'
                 ixs_as_str = f'{ixs_as:6.2f}'
             
-            # Calculate Q·e projections for each atom
+            # Calculate Q*e projections for each atom
             Q_hat_full = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
             
             ev_mode = result['eigenvectors'][:, i, 0]
             ev_reshaped = ev_mode.reshape(3, self.xtal.nat)
             
-            # Calculate Q·e for each atom (complex)
+            # Calculate Q*e for each atom (complex)
             q_dot_e = np.zeros(self.xtal.nat, dtype=complex)
             for iat in range(self.xtal.nat):
                 e_atom = ev_reshaped[:, iat]
                 q_dot_e[iat] = np.vdot(Q_hat_full, e_atom)
             
-            # Find reference atom (largest |Q·e|)
+            # Find reference atom (largest |Q*e|)
             magnitudes = np.abs(q_dot_e)
             ref_atom = np.argmax(magnitudes)
             ref_phase = np.angle(q_dot_e[ref_atom])
@@ -561,11 +561,11 @@ class SingleQAnalyzer:
         # Elastic line with structure factor breakdown
         print('-'* 80)
         
-        # Calculate Q·r for each atom (for elastic scattering)
-        # Show e^(iQ·r) even at Γ (all = 1.0, phase = 0)
+        # Calculate Q*r for each atom (for elastic scattering)
+        # Show e^(iQ*r) even at Gamma (all = 1.0, phase = 0)
         if True:  # Always calculate
             elastic_parts = []
-            # Show e^(iQ·r) for each atom (amplitude and phase)
+            # Show e^(iQ*r) for each atom (amplitude and phase)
             exponentials = np.zeros(self.xtal.nat, dtype=complex)
             
             for iat in range(self.xtal.nat):
@@ -585,11 +585,11 @@ class SingleQAnalyzer:
             
             elastic_str = '    '.join(elastic_parts)
         
-        print(f'  0      0.00    |F|^2 = {F_squared:8.0f}         El.     {elastic_str}')
+        print(f'  0      0.00    |F|^2 = {F_squared:8.0f}         El.   {elastic_str}')
         print('='* 80)
         
         #notes
-        print('\nNotes: IXS units: barn/(unit cell·sr);  DFT uses unmodulated structure (no CDW).')
+        print('\nNotes: IXS units: barn/(unit cell*sr);  DFT uses unmodulated structure (no CDW).')
         print('\n' + '='* 80 + '\n')
     
     def _format_xs(val):
@@ -613,7 +613,7 @@ def interactive_mode():
     """
     
     print("=" * 80)
-    print("  Interactive IXS Analysis for AuTe₂")
+    print("  Interactive IXS Analysis for AuTe2")
     print("=" * 80)
     
     # Load force constants
@@ -628,10 +628,10 @@ def interactive_mode():
                        for i in range(xtal.nat)])
     
     # Temperature
-    kT_cm = 207  # cm⁻¹
+    kT_cm = 207  # cm^-1
     kT_THz = kT_cm * const.c * 80 / 1e12
     
-    print(f"Temperature: {kT_cm:.1f} cm⁻¹ ({kT_THz:.2f} THz)\n")
+    print(f"Temperature: {kT_cm:.1f} cm^-1 ({kT_THz:.2f} THz)\n")
     
     # Create analyzer
     analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
@@ -680,7 +680,7 @@ def interactive_mode():
             continue
         elif user_input.lower() in ['cm', 'cm-1', 'invcm']:
             freq_unit = 'cm-1'
-            print("  → Switched to cm⁻¹\n")
+            print("  → Switched to cm^-1\n")
             continue
         elif user_input.lower() == 'thz':
             freq_unit = 'THz'
@@ -737,7 +737,7 @@ def interactive_mode():
                 angles = sixc.move_to_hkl(tuple(Q_conv), check_only=True)
                 print("\nAngles:")
                 for key, val in angles.items():
-                    print(f"  {key:5s} = {val:7.3f}°")
+                    print(f"  {key:5s} = {val:7.3f}deg")
                 print("="* 80 + "\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
@@ -846,7 +846,7 @@ def interactive_mode():
             # Handle Cartesian input
             if coord_system == 'cartesian':
                 Q_prim = Q @ np.linalg.inv(xtal.b_l)
-                print(f'Converted Cartesian Q = [{Q[0]:.4f}, {Q[1]:.4f}, {Q[2]:.4f}] (2π/Å)')
+                print(f'Converted Cartesian Q = [{Q[0]:.4f}, {Q[1]:.4f}, {Q[2]:.4f}] (2pi/A)')
                 print(f'       to Primitive q = [{Q_prim[0]:.4f}, {Q_prim[1]:.4f}, {Q_prim[2]:.4f}] (r.l.u.)\n')
                 Q_input = Q_prim
                 input_coords = 'primitive'
