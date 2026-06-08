@@ -65,3 +65,17 @@ Reference: Schutte et al., Acta Cryst. B44, 486 (1988)
 - `meV`, `THz`, `invcm` - Switch frequency units
 - `move` - Move diffractometer (with confirmation)
 - `sixc <cmd>` - Pass command to sixcircle
+
+## Recent Updates
+
+### Output Formatting Improvements (2024)
+- Standardized all separator lines to exactly 80 characters for consistent terminal display
+- Reorganized output information for better readability:
+  - Temperature, form factors, and scattering parameters in compact header
+  - IXS units and calculation notes moved to footer
+- Enhanced phonon mode table with:
+  - Clear polarization indicators (L=Longitudinal, T=Transverse, M=Mixed)
+  - Eigenvector projections showing Q·e magnitude and relative phase for each atom
+  - IXS cross-sections for both Stokes and anti-Stokes processes
+  - Structure factor information for elastic scattering
+
