@@ -265,6 +265,174 @@ class SingleQAnalyzer:
         
         return result
     
+
+    def analyze_array(self, Q_center, coords='conventional', freq_unit='meV', 
+                     gap_h=60, gap_v=60, print_results=True):
+        """
+        Analyze phonons across analyzer array at BL43LXU
+        
+        Parameters:
+        -----------
+        Q_center : array-like (3,)
+            Center Q position for analyzer array
+        coords : str
+            'primitive' or 'conventional'  
+        freq_unit : str
+            'meV', 'THz', or 'cm-1'
+        gap_h, gap_v : float
+            Horizontal and vertical analyzer gaps (microns)
+        print_results : bool
+            Print array table
+            
+        Returns:
+        --------
+        array_results : list of dict
+            Results for each analyzer position
+        """
+        
+        # Analyzer positions relative to center (from sixcircle ca6 output)
+        # Row and column offsets in (dH, dK, dL) - approximate for now
+        analyzers = {
+            # Row 0 (a03-a09)
+            'a03': (-0.142, -0.146, -0.006),
+            'a04': (-0.095, -0.098, -0.007),
+            'a05': (-0.048, -0.049, -0.035),
+            'a06': (0.000, 0.000, 0.000),  # Center
+            'a07': (0.048, 0.049, 0.034),
+            'a08': (0.096, 0.099, 0.067),
+            'a09': (0.144, 0.149, 0.099),
+            
+            # Row 1 (a14-a20)  
+            'a14': (-0.197, -0.093, -0.006),
+            'a15': (-0.150, -0.045, -0.007),
+            'a16': (-0.103, 0.004, -0.034),
+            'a17': (-0.055, 0.053, 0.001),
+            'a18': (-0.007, 0.102, 0.035),
+            'a19': (0.041, 0.152, 0.068),
+            'a20': (0.089, 0.202, 0.100),
+            
+            # Row 2 (a25-a31)
+            'a25': (-0.252, -0.040, -0.006),
+            'a26': (-0.205, 0.009, -0.007),
+            'a27': (-0.158, 0.057, -0.034),
+            'a28': (-0.110, 0.106, 0.001),
+            'a29': (-0.062, 0.156, 0.035),
+            'a30': (-0.014, 0.205, 0.068),
+            'a31': (0.034, 0.255, 0.100),
+            
+            # Row 3 (a35-a41)
+            'a35': (-0.306, 0.014, -0.006),
+            'a36': (-0.260, 0.062, -0.007),
+            'a37': (-0.212, 0.111, -0.035),
+            'a38': (-0.165, 0.160, 0.000),
+            'a39': (-0.117, 0.209, 0.034),
+            'a40': (-0.069, 0.259, 0.067),
+            'a41': (-0.020, 0.309, 0.099),
+        }
+        
+        Q_center = np.asarray(Q_center)
+        
+        # Convert to conventional if needed
+        if coords.lower() == 'primitive':
+            Q_center_conv = aute2_prim2conv_k(Q_center)
+        else:
+            Q_center_conv = Q_center
+        
+        array_results = []
+        
+        # Suppress form factor messages during batch calculation
+        import sys
+        import io
+        
+        for name in sorted(analyzers.keys()):
+            dQ = np.array(analyzers[name])
+            Q_analyzer = Q_center_conv + dQ
+            
+            # Analyze this Q point (suppress printing and form factor messages)
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                result = self.analyze(Q_analyzer, coords='conventional', 
+                                     freq_unit=freq_unit, print_results=False)
+            finally:
+                sys.stdout = old_stdout
+            
+            result['analyzer'] = name
+            result['Q_offset'] = dQ
+            array_results.append(result)
+        
+        if print_results:
+            self._print_array_results(array_results, freq_unit)
+        
+        return array_results
+    
+    def _print_array_results(self, array_results, freq_unit='meV'):
+        """Print simplified analyzer array table"""
+        
+        print('\n' + '='*120)
+        print(f'Analyzer Array Results - {len(array_results)} analyzers')
+        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm⁻¹')
+        print('='*120)
+        
+        # Header
+        freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
+        
+        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc·sr)"}')
+        print('-'*120)
+        
+        freq_key = {'meV': 'frequencies_meV', 
+                   'cm-1': 'frequencies_cm',
+                   'THz': 'frequencies_THz'}[freq_unit]
+        
+        for result in array_results:
+            Q = result['Q_conv']
+            freqs = result[freq_key]
+            ixs_stokes = result['IXS_stokes']
+            
+            # Show first 6 modes
+            freq_str = '  '.join([f'{f:5.1f}' for f in freqs[:6]])
+            ixs_str = '  '.join([f'{xs:5.2f}' if xs > 0.01 else ' ~0  ' 
+                                for xs in ixs_stokes[:6]])
+            
+            print(f'{result["analyzer"]:>4s}  {Q[0]:7.3f} {Q[1]:7.3f} {Q[2]:7.3f}  '
+                  f'{freq_str}  {ixs_str}')
+        
+        print('='*120 + '\n')
+
+
+    def _print_array_results(self, array_results, freq_unit='meV'):
+        """Print simplified analyzer array table"""
+        
+        print('\n' + '='*120)
+        print(f'Analyzer Array Results - {len(array_results)} analyzers')
+        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm⁻¹')
+        print('='*120)
+        
+        # Header
+        freq_label = {'meV': 'meV', 'cm-1': 'cm⁻¹', 'THz': 'THz'}[freq_unit]
+        
+        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc·sr)"}')
+        print('-'*120)
+        
+        freq_key = {'meV': 'frequencies_meV', 
+                   'cm-1': 'frequencies_cm',
+                   'THz': 'frequencies_THz'}[freq_unit]
+        
+        for result in array_results:
+            Q = result['Q_conv']
+            freqs = result[freq_key]
+            ixs_stokes = result['IXS_stokes']
+            
+            # Show first 6 modes
+            freq_str = '  '.join([f'{f:5.1f}' for f in freqs[:6]])
+            ixs_str = '  '.join([f'{xs:5.2f}' if xs > 0.01 else ' ~0  ' 
+                                for xs in ixs_stokes[:6]])
+            
+            print(f'{result["analyzer"]:>4s}  {Q[0]:7.3f} {Q[1]:7.3f} {Q[2]:7.3f}  '
+                  f'{freq_str}  {ixs_str}')
+        
+        print('='*120 + '\n')
+
     def _print_results(self, result, detailed=False, freq_unit='meV'):
         """Print analysis results"""
         
@@ -427,6 +595,7 @@ def interactive_mode():
     print("  - Press Enter on empty line to quit")
     print("  - Type 'conv', 'prim', or 'cart' to change coordinate system")
     print("  - Type 'meV', 'THz', or 'invcm' to change frequency units")
+    print("  - Type 'array' to calculate full analyzer array at last Q")
     print("  - Type 'angles' to calculate diffractometer angles for last Q")
     print(f"  - Current system: {coord_system}\n")
     
@@ -466,6 +635,32 @@ def interactive_mode():
             freq_unit = 'THz'
             print(f"  → Switched to THz\n")
             continue
+        elif user_input.lower() == 'array':
+            if current_q is None:
+                print("\n⚠ Enter a Q point first\n")
+                continue
+            try:
+                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
+            except Exception as e:
+                print(f"\n✗ {e}\n")
+                import traceback
+                traceback.print_exc()
+            continue
+            
+        elif user_input.lower() == 'array':
+            if current_q is None:
+                print("\n⚠ Enter a Q point first\n")
+                continue
+            try:
+                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
+            except Exception as e:
+                print(f"\n✗ {e}\n")
+                import traceback
+                traceback.print_exc()
+            continue
+            
         elif user_input.lower() == 'angles':
             if current_q is None:
                 print("\n⚠ Enter a Q point first\n")
