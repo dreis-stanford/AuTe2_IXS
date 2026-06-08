@@ -44,3 +44,24 @@ Sixcircle Integration - 1,184+ lines of new code
 
 AuTe2: Monoclinic C2/m, 3 atoms/cell, 9 phonon branches
 Silicon: FCC diamond, 2 atoms/cell, 6 phonon branches
+
+## Satellite Reflection Analysis
+
+AuTe₂ has a CDW modulation with q_mod = (-0.4076, 0, 0.4479) at 298K.
+
+Access satellites using 4-parameter input:
+H K L m
+where m is the satellite order.
+Examples:
+- `1 0 0` → Main Bragg peak
+- `1 0 0 1` → First satellite: (1,0,0) + q_mod
+- `1 0 0 -1` → First satellite: (1,0,0) - q_mod  
+- `2 0 0 2` → Second order: (2,0,0) + 2×q_mod
+Reference: Schutte et al., Acta Cryst. B44, 486 (1988)
+## Interactive Commands
+- `H K L [m]` - Analyze Q-point (optional m for satellites)
+- `angles` - Calculate diffractometer angles
+- `conv`, `prim`, `cart` - Switch coordinate systems
+- `meV`, `THz`, `invcm` - Switch frequency units
+- `move` - Move diffractometer (with confirmation)
+- `sixc <cmd>` - Pass command to sixcircle
