@@ -471,7 +471,18 @@ def interactive_mode():
                 print("\n⚠ Enter a Q point first\n")
                 continue
             try:
-                sixc = SixCircleInterface()
+                import sys
+                import io
+                
+                # Suppress sixcircle verbose output
+                old_stdout = sys.stdout
+                sys.stdout = io.StringIO()
+                
+                try:
+                    sixc = SixCircleInterface()
+                finally:
+                    sys.stdout = old_stdout
+                
                 print("\n" + "="*70)
                 print("Diffractometer Angles" + (" (SIMULATION)" if sixc.simulation_mode else ""))
                 print("="*70)
