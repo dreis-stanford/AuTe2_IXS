@@ -33,5 +33,7 @@ Thumbs.db
 *~
 *.bak
 *.backup
-*.backup
+*.backup_*
+*.before_*
+*.broken
 archive/
