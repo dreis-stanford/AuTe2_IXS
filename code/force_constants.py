@@ -100,9 +100,13 @@ class ForceConstants:
                 type_idx = int(match.group(1)) - 1  # Convert to 0-based
                 symbol = match.group(2).strip()
                 m_val = float(match.group(3))
-                
-                # Convert from file units to amu
-                self.masses[type_idx] = m_val / const.M_u * 1e6  # Now in amu
+
+                # Convert from file units to amu.
+                # QE .fc masses are in Rydberg atomic units (mass unit = 2*m_e),
+                # so amu = m_val / (M_u / (2*Me)) = m_val / 911.444
+                # (Previously divided by M_u/1e6 = 931.494, making all masses
+                #  2.15% low and all frequencies ~1.09% high.)
+                self.masses[type_idx] = m_val * (2 * const.Me) / const.M_u  # Now in amu
                 self.symbols.append(symbol)
             else:
                 raise ValueError(f"Could not parse mass line: {line}")

@@ -158,20 +158,23 @@ class SingleQAnalyzer:
             
             for imode in range(nmodes):
                 ev_mode = ev[:, imode, 0]
-                ev_reshaped = ev_mode.reshape(3, self.xtal.nat)
-                
+                # DOF layout is atom-major [x1,y1,z1, x2,y2,z2, ...]
+                # -> reshape to (nat, 3) so each row is one atom's (x,y,z)
+                ev_reshaped = ev_mode.reshape(self.xtal.nat, 3)
+
                 total_amp_sq = 0.0
                 long_amp_sq = 0.0
-                
+
                 for iat in range(self.xtal.nat):
-                    ev_atom = ev_reshaped[:, iat]
-                    
+                    ev_atom = ev_reshaped[iat, :]
+
                     # Convert to physical displacement (undo mass weighting)
                     ev_atom_physical = ev_atom / np.sqrt(self.masses[iat])
-                    
-                    atom_amp_sq = np.abs(np.dot(ev_atom_physical, ev_atom_physical))
+
+                    # Sum |e_i|^2 (vdot conjugates; plain dot would give |sum e_i^2|)
+                    atom_amp_sq = np.real(np.vdot(ev_atom_physical, ev_atom_physical))
                     total_amp_sq += atom_amp_sq
-                    
+
                     long_proj = np.dot(Q_hat, ev_atom_physical)
                     long_amp_sq += np.abs(long_proj)**2
                 
@@ -202,11 +205,12 @@ class SingleQAnalyzer:
         
         for imode in range(nmodes):
             ev_mode = ev[:, imode, 0]
-            ev_reshaped = ev_mode.reshape(3, self.xtal.nat)
-            
+            # Atom-major layout -> (nat, 3), one row per atom
+            ev_reshaped = ev_mode.reshape(self.xtal.nat, 3)
+
             physical_amp = np.zeros(self.xtal.nat)
             for iat in range(self.xtal.nat):
-                ev_atom = ev_reshaped[:, iat]
+                ev_atom = ev_reshaped[iat, :]
                 ev_atom_physical = ev_atom / np.sqrt(self.masses[iat])
                 physical_amp[iat] = np.sum(np.abs(ev_atom_physical)**2)
             
@@ -231,7 +235,7 @@ class SingleQAnalyzer:
             for iat in range(self.xtal.nat):
                 e_atom = ev_mode[3*iat:3*iat+3]
                 Q_dot_e = np.real(np.vdot(Q_hat, e_atom))
-                longitudinal_signed[imode, iat] = 80 * Q_dot_e / (total_ev_norm + 1e-12)
+                longitudinal_signed[imode, iat] = 100 * Q_dot_e / (total_ev_norm + 1e-12)
         
         result['longitudinal_signed'] = longitudinal_signed
         
@@ -527,12 +531,13 @@ class SingleQAnalyzer:
             Q_hat_full = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
             
             ev_mode = result['eigenvectors'][:, i, 0]
-            ev_reshaped = ev_mode.reshape(3, self.xtal.nat)
-            
+            # Atom-major layout -> (nat, 3), one row per atom
+            ev_reshaped = ev_mode.reshape(self.xtal.nat, 3)
+
             # Calculate Q*e for each atom (complex)
             q_dot_e = np.zeros(self.xtal.nat, dtype=complex)
             for iat in range(self.xtal.nat):
-                e_atom = ev_reshaped[:, iat]
+                e_atom = ev_reshaped[iat, :]
                 q_dot_e[iat] = np.vdot(Q_hat_full, e_atom)
             
             # Find reference atom (largest |Q*e|)
@@ -629,8 +634,8 @@ def interactive_mode():
     
     # Temperature
     kT_cm = 207  # cm^-1
-    kT_THz = kT_cm * const.c * 80 / 1e12
-    
+    kT_THz = kT_cm * const.c * 100 / 1e12  # cm^-1 -> THz (c in m/s * 100 = cm/s)
+
     print(f"Temperature: {kT_cm:.1f} cm^-1 ({kT_THz:.2f} THz)\n")
     
     # Create analyzer
@@ -898,7 +903,7 @@ if __name__ == "__main__":
     
     # Temperature
     kT_cm = 207
-    kT_THz = kT_cm * const.c * 80 / 1e12
+    kT_THz = kT_cm * const.c * 100 / 1e12  # cm^-1 -> THz (c in m/s * 100 = cm/s)
     
     # Create analyzer
     analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
