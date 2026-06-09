@@ -5,6 +5,33 @@
 tests/ pass (`pytest tests/ -v` from project root). See CODE_REVIEW.md for
 the full review and KNOWN_ISSUES.md for resolved bugs.
 
+## Sixcircle geometry sanity check — RESOLVED
+Wrote check_sixcircle_geometry.py (uses scbasic.py from
+~/Documents/MyPython/Others/sixcircle_1p85/ directly, no sixcircle module
+side effects). Result: OVERALL PASS, no rotation-sense/lab-frame convention
+mismatch.
+
+- Test 1 (Si cubic, trivial mounting a||x b||y c||z): U == diag(1,-1,-1) as
+  expected from beam-along--y geometry; ca() round-trips and verify_full
+  passes exactly for (4,0,0), (0,4,0), (0,0,4).
+- Test 2 (AuTe2, or0=(0,0,1) chi=90 / or1=(0,2,0) phi=90 from
+  _load_sixcircle): or0/or1 round-trip tth/chi correctly; UB matrix is
+  self-consistent (U has ~1.5° off-diagonal tilt, expected for a real
+  mount).
+- Found and fixed one real bug in code/verify_scattering.py: verify_full
+  used k_in = k*[0,-1,0] (ignoring mu) while Q_lab included the R_mu
+  rotation, so for AuTe2's mu=-0.1719° every reflection showed a spurious
+  ~0.033 Å⁻¹ "direction error" (WARNING). Fixed k_in to
+  k*[0,-cos(mu),-sin(mu)] and k_out_expected to include cos(gam)/sin(gam);
+  all AuTe2 direction errors now <0.005 Å⁻¹ (PASS). 14/14 tests still pass.
+- Conclusion: the hardcoded or0/or1 angles in
+  code/sixcircle_interface.py _load_sixcircle are correct and consistent
+  with scbasic.py conventions — no changes needed there.
+
+Remaining minor item (not blocking): or0 (0,0,1) BASIC test (|Q| from
+lattice vs from angle) is a WARNING at 3.55e-4 rel. error, from tth=6.45°
+being rounded to 2 decimals vs exact Bragg angle 6.448°. Cosmetic only.
+
 Fixed and verified today:
 - sed-corrupted constants (kT * 80 -> * 100); update_separators.sh retired
 - Eigenvector reshape bug (atom-major layout) -> L-char, participation,
