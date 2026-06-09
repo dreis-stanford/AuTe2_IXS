@@ -1,8 +1,8 @@
 # Installation
 
 ## Step 1: Clone
-git clone https://github.com/YOUR_USERNAME/AuTe2_ixs_project.git
-cd AuTe2_ixs_project
+git clone git@github.com:dreis-stanford/AuTe2_IXS.git
+cd AuTe2_IXS
 
 ## Step 2: Install Python packages
 pip install numpy scipy matplotlib

@@ -31,11 +31,11 @@ for f in ['code/phonons.py', 'data/AuTe_2_m.fc']:
         print(f"   ✗ {f} NOT FOUND")
         sys.exit(1)
 
-# Test import
+# Test import (also exercises code/__init__.py, which auto-loads the
+# DFT structure from data/AuTe_2_m.fc - expect a structure summary below)
 print("\n4. Testing imports...")
-sys.path.insert(0, 'code')
-from force_constants import ForceConstants
-from phonons import calc_Dq
+from code.force_constants import ForceConstants
+from code.phonons import calc_Dq
 print("   ✓ All imports work")
 
 print("\n✓ Installation successful!")
