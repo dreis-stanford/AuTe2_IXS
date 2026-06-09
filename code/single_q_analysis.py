@@ -438,6 +438,49 @@ class SingleQAnalyzer:
         
         print('='*80 + '\n')
 
+    @staticmethod
+    def qe_projections(ev_mode, Q_hat, nat, noise_threshold=0.05):
+        """
+        Per-atom Q.epsilon projections for the mode table.
+
+        Parameters:
+        -----------
+        ev_mode : ndarray (3*nat,) complex
+            Mass-weighted eigenvector (polarization vector epsilon),
+            atom-major layout [x1,y1,z1, x2,y2,z2, ...]
+        Q_hat : ndarray (3,)
+            Unit vector along full Q (Cartesian)
+        nat : int
+            Number of atoms in the cell
+        noise_threshold : float
+            Phases are reported as NaN where |Q.e| < noise_threshold
+            (absolute scale; eigenvectors are normalized to 1, so the phase
+            of a near-zero projection is numerical noise)
+
+        Returns:
+        --------
+        magnitudes : ndarray (nat,)
+            |Q_hat . epsilon_atom|
+        phases_deg : ndarray (nat,)
+            Phase relative to the atom with largest |Q.e|, in (-180, 180].
+            NaN where the magnitude is below the noise threshold.
+
+        Note: phases follow the dynamical-matrix convention (phase factor
+        e^{2*pi*i q.R} over lattice vectors only), the same convention used
+        by calc_ixs. They therefore include the physical phase advance of
+        the wave across the atomic basis.
+        """
+        ev_reshaped = np.asarray(ev_mode).reshape(nat, 3)
+        q_dot_e = np.array([np.vdot(Q_hat, ev_reshaped[iat, :])
+                            for iat in range(nat)])
+
+        magnitudes = np.abs(q_dot_e)
+        ref_atom = int(np.argmax(magnitudes))
+        phases_deg = np.degrees(np.angle(q_dot_e) - np.angle(q_dot_e[ref_atom]))
+        phases_deg = np.mod(phases_deg + 180, 360) - 180
+        phases_deg[magnitudes < noise_threshold] = np.nan
+        return magnitudes, phases_deg
+
     def _print_results(self, result, detailed=False, freq_unit='meV'):
         """Print analysis results - compact format"""
         
@@ -464,8 +507,9 @@ class SingleQAnalyzer:
         
         for iat in range(self.xtal.nat):
             r_frac = self.xtal.xs[iat]  # Fractional coordinates
-            phase = 2 * np.pi * np.dot(Q_prim_vec, r_frac)
-            
+            # Sign convention matches calc_ixs (exp(-2j*pi*Q.r))
+            phase = -2 * np.pi * np.dot(Q_prim_vec, r_frac)
+
             if iat == 0:  # Au
                 F += f_Au * np.exp(1j * phase)
             else:  # Te
@@ -506,7 +550,7 @@ class SingleQAnalyzer:
             # Determine polarization
             L = long_char[i]
             if np.isnan(L):
-                pol = 'M'
+                pol = '--'  # undefined at reduced q = Gamma
             elif L > 0.7:
                 pol = 'L'
             elif L < 0.3:
@@ -529,36 +573,26 @@ class SingleQAnalyzer:
             
             # Calculate Q*e projections for each atom
             Q_hat_full = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
-            
-            ev_mode = result['eigenvectors'][:, i, 0]
-            # Atom-major layout -> (nat, 3), one row per atom
-            ev_reshaped = ev_mode.reshape(self.xtal.nat, 3)
 
-            # Calculate Q*e for each atom (complex)
-            q_dot_e = np.zeros(self.xtal.nat, dtype=complex)
-            for iat in range(self.xtal.nat):
-                e_atom = ev_reshaped[iat, :]
-                q_dot_e[iat] = np.vdot(Q_hat_full, e_atom)
-            
-            # Find reference atom (largest |Q*e|)
-            magnitudes = np.abs(q_dot_e)
-            ref_atom = np.argmax(magnitudes)
-            ref_phase = np.angle(q_dot_e[ref_atom])
-            
-            # Calculate relative phases (degrees)
-            phases = np.angle(q_dot_e) - ref_phase
-            phases_deg = np.degrees(phases)
-            phases_deg = np.mod(phases_deg + 180, 360) - 180
-            
-            # Format eigenvector info
+            ev_mode = result['eigenvectors'][:, i, 0]
+            magnitudes, phases_deg = self.qe_projections(
+                ev_mode, Q_hat_full, self.xtal.nat)
+
+            # Format eigenvector info.
+            # Blank everything at Q=0; blank phases where |Q.e| is numerical
+            # noise, and for the degenerate acoustic modes at reduced q = Gamma
+            # (eigenvectors are an arbitrary mixture there).
+            acoustic_at_gamma = at_gamma and freq_data[i] < 1.0
             if Q_mag < 1e-10:
                 ev_str = "      ---           ---            ---"
             else:
                 ev_parts = []
                 for iat in range(self.xtal.nat):
                     mag = magnitudes[iat]
-                    phase = phases_deg[iat]
-                    ev_parts.append(f'{mag:4.2f},{phase:+4.0f}')
+                    if np.isnan(phases_deg[iat]) or acoustic_at_gamma:
+                        ev_parts.append(f'{mag:4.2f},  --')
+                    else:
+                        ev_parts.append(f'{mag:4.2f},{phases_deg[iat]:+4.0f}')
                 ev_str = '    '.join(ev_parts)
             
             print(f'{i+1:3d}   {freq_data[i]:7.2f}    {ixs_s_str:>6s}   {ixs_as_str:>6s}    {pol:>4s}     {ev_str}')
@@ -567,15 +601,17 @@ class SingleQAnalyzer:
         print('-'* 80)
         
         # Calculate Q*r for each atom (for elastic scattering)
-        # Show e^(iQ*r) even at Gamma (all = 1.0, phase = 0)
+        # Show e^(-iQ*r) even at Gamma (all = 1.0, phase = 0)
         if True:  # Always calculate
             elastic_parts = []
-            # Show e^(iQ*r) for each atom (amplitude and phase)
+            # Show e^(-2pi*i Q*r) for each atom (amplitude and phase)
+            # Sign convention matches calc_ixs (exp(-2j*pi*Q.r)) so phonon-row
+            # and elastic-row phases are directly comparable.
             exponentials = np.zeros(self.xtal.nat, dtype=complex)
-            
+
             for iat in range(self.xtal.nat):
                 r_frac = self.xtal.xs[iat]
-                phase = 2 * np.pi * np.dot(Q_prim, r_frac)
+                phase = -2 * np.pi * np.dot(Q_prim, r_frac)
                 exponentials[iat] = np.exp(1j * phase)
             
             # Find reference (first atom, or could use largest)
