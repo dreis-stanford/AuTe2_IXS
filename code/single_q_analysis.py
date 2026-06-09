@@ -1,6 +1,9 @@
 """
-Interactive IXS analysis for single Q-points in AuTe2
-Matches MATLAB calcIXS_single_Q_AuTe2.m and interactive script
+Interactive IXS analysis for single Q-points.
+
+Material-generic analyzer (originally written for AuTe2, matching MATLAB
+calcIXS_single_Q_AuTe2.m). AuTe2 is the default material; Silicon is
+configured in single_q_analysis_si.py via the same class.
 """
 
 import numpy as np
@@ -15,16 +18,54 @@ from .aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
 from .modulated_structure import ModulatedStructure
 
 
+# ============================================================================
+# Mode polarization classification (unified scheme)
+# ============================================================================
+# Strict L/T thresholds: meaningful for selection rules. On symmetry lines the
+# (fixed) L-char numerics reach exact 0/1 to ~1e-6, so 0.95/0.05 is
+# comfortably above numerical noise; tighten here if desired.
+STRICT_L = 0.95   # L-char above this  -> 'L'    (longitudinal, selection-rule grade)
+STRICT_T = 0.05   # L-char below this  -> 'T'    (transverse, selection-rule grade)
+PRIMARY_L = 0.7   # L-char above this  -> 'M(L)' (mixed, primarily longitudinal)
+PRIMARY_T = 0.3   # L-char below this  -> 'M(T)' (mixed, primarily transverse)
+#                   anything else      -> 'M'    (mixed)
+
+
+def classify_polarization(L):
+    """
+    Classify mode polarization from longitudinal character L in [0, 1].
+
+    Returns 'L', 'T', 'M(L)', 'M(T)', 'M', or '--' (undefined, e.g. at
+    reduced q = Gamma where L is NaN).
+    """
+    if np.isnan(L):
+        return '--'
+    if L > STRICT_L:
+        return 'L'
+    if L < STRICT_T:
+        return 'T'
+    if L > PRIMARY_L:
+        return 'M(L)'
+    if L < PRIMARY_T:
+        return 'M(T)'
+    return 'M'
+
+
 class SingleQAnalyzer:
     """
-    Analyze phonons and IXS at a single Q-point
-    Matches MATLAB calcIXS_single_Q_AuTe2.m
+    Analyze phonons and IXS at a single Q-point (material-generic).
+
+    Defaults configure AuTe2 (monoclinic C2/m conv<->prim transforms, CDW
+    satellites). Pass conv2prim/prim2conv and enable_satellites=False for
+    other materials (see single_q_analysis_si.py for Silicon).
     """
-    
-    def __init__(self, xtal, Phi, masses, kT_THz):
+
+    def __init__(self, xtal, Phi, masses, kT_THz,
+                 conv2prim=None, prim2conv=None,
+                 enable_satellites=True, material='AuTe2'):
         """
         Initialize analyzer
-        
+
         Parameters:
         -----------
         xtal : ForceConstants
@@ -35,15 +76,37 @@ class SingleQAnalyzer:
             Atomic masses in amu
         kT_THz : float
             Temperature in THz
+        conv2prim, prim2conv : callable, optional
+            Reciprocal-space coordinate transforms (default: AuTe2 C2/m)
+        enable_satellites : bool
+            Enable CDW satellite (H K L m) handling (default True; AuTe2)
+        material : str
+            Material name for printouts
         """
         self.xtal = xtal
         self.Phi = Phi
         self.masses = masses
         self.kT_THz = kT_THz
-        self.mod_struct = ModulatedStructure()
-        
-    def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True, 
-                print_detailed=False, threshold_L=0.7, threshold_T=0.3):
+        self.material = material
+        self.conv2prim = conv2prim if conv2prim is not None else aute2_conv2prim_k
+        self.prim2conv = prim2conv if prim2conv is not None else aute2_prim2conv_k
+        self.mod_struct = ModulatedStructure() if enable_satellites else None
+
+        # Per-atom element symbols and unique table labels (e.g. Au, Te1, Te2)
+        self.symbols = [xtal.symbols[xtal.atom_type_map[i] - 1]
+                        for i in range(xtal.nat)]
+        counts = {s: self.symbols.count(s) for s in set(self.symbols)}
+        seen = {}
+        self.atom_labels = []
+        for s in self.symbols:
+            if counts[s] == 1:
+                self.atom_labels.append(s)
+            else:
+                seen[s] = seen.get(s, 0) + 1
+                self.atom_labels.append(f'{s}{seen[s]}')
+
+    def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True,
+                print_detailed=False):
         """
         Analyze phonons and IXS at single Q-point
         
@@ -186,18 +249,8 @@ class SingleQAnalyzer:
         result['long_char'] = long_char
         result['Q_hat'] = Q_hat
         
-        # Classify modes
-        pol_type = []
-        for L in long_char:
-            if np.isnan(L):
-                pol_type.append('Undefined')
-            elif L < threshold_T:
-                pol_type.append('Transverse')
-            elif L > threshold_L:
-                pol_type.append('Longitudinal')
-            else:
-                pol_type.append('Mixed')
-        
+        # Classify modes (unified scheme, see classify_polarization)
+        pol_type = [classify_polarization(L) for L in long_char]
         result['pol_type'] = pol_type
         
         # Atomic participation
@@ -239,18 +292,17 @@ class SingleQAnalyzer:
         
         result['longitudinal_signed'] = longitudinal_signed
         
-        # Calculate form factors
+        # Calculate form factors (one per element, applied per atom)
         Q_sinThOverLambda = Q_mag / (4 * np.pi)
-        
-        # For AuTe2: first atom is Au, next two are Te
-        fAu = CalcAtomicfQ(Q_mag, 'Au', scale=4*np.pi, use_xraylib=False)
-        fTe = CalcAtomicfQ(Q_mag, 'Te', scale=4*np.pi, use_xraylib=False)
-        
+
+        f_by_element = {s: CalcAtomicfQ(Q_mag, s, scale=4*np.pi, use_xraylib=False)
+                        for s in set(self.symbols)}
+
         result['Q_sinThOverLambda'] = Q_sinThOverLambda
-        result['form_factors'] = {'Au': fAu, 'Te': fTe}
-        
+        result['form_factors'] = f_by_element
+
         # Prepare for IXS calculation
-        fQ_matrix = np.array([[fAu, fTe, fTe]])
+        fQ_matrix = np.array([[f_by_element[s] for s in self.symbols]])
         
         # Calculate IXS
         Is, Ias, n, F, xs_info = calc_ixs(
@@ -373,41 +425,7 @@ class SingleQAnalyzer:
     
     def _print_array_results(self, array_results, freq_unit='meV'):
         """Print simplified analyzer array table"""
-        
-        print('\n' + '='*80)
-        print(f'Analyzer Array Results - {len(array_results)} analyzers')
-        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm^-1')
-        print('='*80)
-        
-        # Header
-        freq_label = {'meV': 'meV', 'cm-1': 'cm^-1', 'THz': 'THz'}[freq_unit]
-        
-        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc*sr)"}')
-        print('-'*80)
-        
-        freq_key = {'meV': 'frequencies_meV', 
-                   'cm-1': 'frequencies_cm',
-                   'THz': 'frequencies_THz'}[freq_unit]
-        
-        for result in array_results:
-            Q = result['Q_conv']
-            freqs = result[freq_key]
-            ixs_stokes = result['IXS_stokes']
-            
-            # Show first 6 modes
-            freq_str = '  '.join([f'{f:5.1f}' for f in freqs[:6]])
-            ixs_str = '  '.join([f'{xs:5.2f}' if xs > 0.01 else ' ~0  ' 
-                                for xs in ixs_stokes[:6]])
-            
-            print(f'{result["analyzer"]:>4s}  {Q[0]:7.3f} {Q[1]:7.3f} {Q[2]:7.3f}  '
-                  f'{freq_str}  {ixs_str}')
-        
-        print('='* 80 + '\n')
 
-
-    def _print_array_results(self, array_results, freq_unit='meV'):
-        """Print simplified analyzer array table"""
-        
         print('\n' + '='* 80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
         print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm^-1')
@@ -491,29 +509,21 @@ class SingleQAnalyzer:
         
         # Temperature and form factors
         kT_K = self.kT_THz * const.THz2meV / 1000 / 8.617333262e-5
+        ff_str = '  '.join(f'f({s})={f:.1f}'
+                           for s, f in sorted(result["form_factors"].items()))
         print(f'\nT={kT_K:.0f}K  '
-              f'sin(θ)/λ={result["Q_sinThOverLambda"]:.4f} A^-1  '
-              f'f(Au)={result["form_factors"]["Au"]:.1f}  '
-              f'f(Te)={result["form_factors"]["Te"]:.1f}')
+              f'sin(θ)/λ={result["Q_sinThOverLambda"]:.4f} A^-1  {ff_str}')
         
         # Calculate structure factor for elastic scattering
         # F(Q) = sum_atoms f_atom(Q) * exp(2pii Q_prim * r_frac)
         F = 0.0 + 0.0j
         Q_prim_vec = Q_prim
         
-        # AuTe2: atom 0 is Au, atoms 1,2 are Te
-        f_Au = result["form_factors"]["Au"]
-        f_Te = result["form_factors"]["Te"]
-        
         for iat in range(self.xtal.nat):
             r_frac = self.xtal.xs[iat]  # Fractional coordinates
             # Sign convention matches calc_ixs (exp(-2j*pi*Q.r))
             phase = -2 * np.pi * np.dot(Q_prim_vec, r_frac)
-
-            if iat == 0:  # Au
-                F += f_Au * np.exp(1j * phase)
-            else:  # Te
-                F += f_Te * np.exp(1j * phase)
+            F += result["form_factors"][self.symbols[iat]] * np.exp(1j * phase)
         
         F_squared = np.abs(F)**2
         
@@ -536,8 +546,9 @@ class SingleQAnalyzer:
                      'cm-1': result['frequencies_cm'],
                      'THz': result['frequencies_THz']}[freq_unit]
         
+        atom_cols = '   '.join(f'{lbl}:Q*e,ph' for lbl in self.atom_labels)
         print('\n' + '='* 80)
-        print(f'Mode  Freq({freq_label:>3s})    IXS(S)   IXS(AS)    Pol   Au:Q*e,ph   Te1:Q*e,ph  Te2:Q*e,ph')
+        print(f'Mode  Freq({freq_label:>3s})    IXS(S)   IXS(AS)    Pol   {atom_cols}')
         print('-'* 80)
         
         # Phonon modes
@@ -547,18 +558,8 @@ class SingleQAnalyzer:
         Ias = result['IXS_antistokes']
         
         for i in range(len(w_meV)):
-            # Determine polarization
-            L = long_char[i]
-            if np.isnan(L):
-                pol = '--'  # undefined at reduced q = Gamma
-            elif L > 0.7:
-                pol = 'L'
-            elif L < 0.3:
-                pol = 'T'
-            elif L > 0.5:
-                pol = 'M(L)'
-            else:
-                pol = 'M(T)'
+            # Determine polarization (unified scheme)
+            pol = classify_polarization(long_char[i])
             
             # Format IXS values (0.00 to 999.99)
             # Show --- for acoustic modes at or near Gamma point
@@ -584,7 +585,7 @@ class SingleQAnalyzer:
             # (eigenvectors are an arbitrary mixture there).
             acoustic_at_gamma = at_gamma and freq_data[i] < 1.0
             if Q_mag < 1e-10:
-                ev_str = "      ---           ---            ---"
+                ev_str = '    '.join(['     ---  '] * self.xtal.nat)
             else:
                 ev_parts = []
                 for iat in range(self.xtal.nat):
@@ -647,60 +648,91 @@ class SingleQAnalyzer:
             return f'{val:.2e}'
 
 
-def interactive_mode():
+# Material configurations for interactive_mode
+MATERIALS = {
+    'AuTe2': dict(
+        fc_file="data/AuTe_2_m.fc",
+        conv2prim=None, prim2conv=None,      # defaults = AuTe2 C2/m
+        satellites=True,                      # CDW satellites (H K L m)
+        sixcircle=True,                       # diffractometer configured for AuTe2
+        name='AuTe2',
+    ),
+    'Si': dict(
+        fc_file="data/Test__Silicon_dispersion/Qgrid_888/Cg.fc",
+        conv2prim=None, prim2conv=None,       # set below (FCC), import here
+        satellites=False,
+        sixcircle=False,                      # sixcircle lattice is AuTe2-specific
+        name='Silicon',
+    ),
+}
+
+
+def interactive_mode(material='AuTe2'):
     """
-    Interactive Q-point analysis mode
+    Interactive Q-point analysis mode (material-generic)
     Matches MATLAB interactive script
     """
-    
+    mat = MATERIALS[material]
+
+    if material == 'Si':
+        from .fcc_structure import fcc_conv2prim_k, fcc_prim2conv_k
+        mat = dict(mat, conv2prim=fcc_conv2prim_k, prim2conv=fcc_prim2conv_k)
+
     print("=" * 80)
-    print("  Interactive IXS Analysis for AuTe2")
+    print(f"  Interactive IXS Analysis for {mat['name']}")
     print("=" * 80)
-    
+
     # Load force constants
-    fc_file = "data/AuTe_2_m.fc"
+    fc_file = mat['fc_file']
     print(f"\nLoading force constants from {fc_file}...")
-    
+
     xtal = ForceConstants(fc_file)
     Phi = xtal.convert_to_eV_per_Angstrom2()
-    
+
     # Get masses
-    masses = np.array([xtal.masses[xtal.atom_type_map[i]-1] 
+    masses = np.array([xtal.masses[xtal.atom_type_map[i]-1]
                        for i in range(xtal.nat)])
-    
+
     # Temperature
     kT_cm = 207  # cm^-1
     kT_THz = kT_cm * const.c * 100 / 1e12  # cm^-1 -> THz (c in m/s * 100 = cm/s)
 
     print(f"Temperature: {kT_cm:.1f} cm^-1 ({kT_THz:.2f} THz)\n")
-    
+
     # Create analyzer
-    analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
-    
+    analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz,
+                               conv2prim=mat['conv2prim'],
+                               prim2conv=mat['prim2conv'],
+                               enable_satellites=mat['satellites'],
+                               material=mat['name'])
+
     # Initialize sixcircle interface once (reuse it for all angle calculations)
-    try:
+    sixc = None
+    if mat['sixcircle']:
         try:
-            from .sixcircle_interface import SixCircleInterface
-        except ImportError:
-            from sixcircle_interface import SixCircleInterface
-        sixc = SixCircleInterface()
-        print(f"✓ Sixcircle interface loaded ({'SIMULATION' if sixc.simulation_mode else 'LIVE'})")
-    except Exception as e:
-        sixc = None
-        print(f"⚠ Sixcircle not available: {e}")
-    
+            try:
+                from .sixcircle_interface import SixCircleInterface
+            except ImportError:
+                from sixcircle_interface import SixCircleInterface
+            sixc = SixCircleInterface()
+            print(f"✓ Sixcircle interface loaded ({'SIMULATION' if sixc.simulation_mode else 'LIVE'})")
+        except Exception as e:
+            print(f"⚠ Sixcircle not available: {e}")
+
     # Default coordinate system
     coord_system = 'conventional'
     freq_unit = 'meV'
-    
+
     print("Instructions:")
     print("  - Enter Q vector as three numbers (e.g., 0.5 0 0)")
-    print("  - For satellites, add order m: H K L m (e.g., 1 0 0 1 for first satellite)")
+    if mat['satellites']:
+        print("  - For satellites, add order m: H K L m (e.g., 1 0 0 1 for first satellite)")
     print("  - Press Enter on empty line to quit")
     print("  - Type 'conv', 'prim', or 'cart' to change coordinate system")
     print("  - Type 'meV', 'THz', or 'invcm' to change frequency units")
     print("  - Type 'array' to calculate full analyzer array at last Q")
-    print("  - Type 'angles' to calculate diffractometer angles for last Q")
+    if mat['sixcircle']:
+        print("  - Type 'angles' to calculate diffractometer angles for last Q")
     print(f"  - Current system: {coord_system}\n")
     
     current_q = None
@@ -744,27 +776,14 @@ def interactive_mode():
                 print("\n⚠ Enter a Q point first\n")
                 continue
             try:
-                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
                 analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
             except Exception as e:
                 print(f"\n✗ {e}\n")
                 import traceback
                 traceback.print_exc()
             continue
-            
-        elif user_input.lower() == 'array':
-            if current_q is None:
-                print("\n⚠ Enter a Q point first\n")
-                continue
-            try:
-                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
-                analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
-            except Exception as e:
-                print(f"\n✗ {e}\n")
-                import traceback
-                traceback.print_exc()
-            continue
-            
+
         elif user_input.lower() == 'angles':
             if current_q is None:
                 print("\n⚠ Enter a Q point first\n")
@@ -776,7 +795,7 @@ def interactive_mode():
                 print("\n" + "="* 80)
                 print("Diffractometer Angles" + (" (SIMULATION)" if sixc.simulation_mode else ""))
                 print("="* 80)
-                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
                 print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
                 print("\nAngles:")
                 # Call ca() directly - it prints the angles itself
@@ -794,12 +813,14 @@ def interactive_mode():
             if current_q is None:
                 print("\n⚠ Enter a Q point first\n")
                 continue
+            if sixc is None:
+                print(f"\n⚠ Sixcircle not configured for {analyzer.material}\n")
+                continue
             try:
-                sixc = SixCircleInterface()
                 if sixc.simulation_mode:
                     print("\n⚠ In simulation mode - cannot move\n")
                     continue
-                Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
+                Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
                 print("\n" + "="* 80)
                 print("⚠ WARNING: Will MOVE diffractometer!")
                 print("="* 80)
@@ -823,8 +844,10 @@ def interactive_mode():
                 print("\n⚠ Usage: sixc <command>\n")
                 print("  Examples: sixc wh, sixc pa, sixc or_check\n")
                 continue
+            if sixc is None:
+                print(f"\n⚠ Sixcircle not configured for {analyzer.material}\n")
+                continue
             try:
-                sixc = SixCircleInterface()
                 if sixc.simulation_mode:
                     print("\n⚠ Simulation mode - sixcircle commands not available\n")
                     continue
@@ -877,6 +900,13 @@ def interactive_mode():
                 satellite_order = 0
             elif len(parts) == 4:
                 # Satellite Q input: H K L m
+                if analyzer.mod_struct is None:
+                    print(f'⚠ Satellites not configured for {analyzer.material}\n')
+                    continue
+                if coord_system != 'conventional':
+                    # q_mod is defined in conventional r.l.u.
+                    print("⚠ Satellite input (H K L m) requires 'conv' coordinates\n")
+                    continue
                 Q_main = np.array([float(x) for x in parts[:3]])
                 satellite_order = int(parts[3])
                 # Calculate satellite position
