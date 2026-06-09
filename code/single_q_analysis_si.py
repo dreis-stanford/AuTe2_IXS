@@ -126,11 +126,15 @@ class SingleQAnalyzer:
         nmodes = len(w_cm)
         
         # Calculate longitudinal/transverse character
+        # Use the REDUCED q (phonon propagation direction), not full Q:
+        # polarization character is defined relative to q, and must not
+        # depend on which Brillouin zone Q sits in.
         long_char = np.zeros(nmodes)
         Q_hat = None
-        
-        if Q_mag > 1e-6:
-            Q_hat = Q_cart / Q_mag
+        Q_mag_reduced = np.linalg.norm(Q_cart_reduced)
+
+        if Q_mag_reduced > 1e-6:
+            Q_hat = Q_cart_reduced / Q_mag_reduced
             
             for imode in range(nmodes):
                 ev_mode = ev[:, imode, 0]
@@ -201,10 +205,10 @@ class SingleQAnalyzer:
         
         result['atom_participation'] = atom_participation
         
-        # Calculate signed longitudinal components (Q·e for each atom)
-        Q_cart = result['Q_cart']
-        Q_mag = result['Q_mag']
-        Q_hat = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
+        # Calculate signed longitudinal components (q·e for each atom)
+        # Reduced q direction, consistent with L-char (and the AuTe2 analyzer)
+        Q_hat = (Q_cart_reduced / Q_mag_reduced if Q_mag_reduced > 1e-10
+                 else np.zeros(3))
         
         longitudinal_signed = np.zeros((nmodes, self.xtal.nat))
         

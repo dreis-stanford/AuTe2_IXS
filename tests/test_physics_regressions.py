@@ -242,6 +242,65 @@ def test_qe_projections_reconstruct_F(si):
 
 
 # ---------------------------------------------------------------------------
+# Mode characterization (L/T labels) — verified 2026-06-09
+# ---------------------------------------------------------------------------
+
+def _silence(fn, *args, **kwargs):
+    import io, contextlib
+    with contextlib.redirect_stdout(io.StringIO()):
+        return fn(*args, **kwargs)
+
+
+def test_si_lchar_G_invariance(si):
+    """L-char must depend only on reduced q, not on which zone Q sits in.
+
+    Regression for the bug where the Si analyzer projected onto full Q-hat:
+    with G=(2,0,0) not parallel to q=(0,0.1,0), that gave garbage.
+    """
+    from code.single_q_analysis_si import SingleQAnalyzer as SiAnalyzer
+    xtal, Phi, masses = si
+    kT = 207 * const.c * 100 / 1e12
+    a = SiAnalyzer(xtal, Phi, masses, kT)
+
+    L_pure = _silence(a.analyze, [0.0, 0.1, 0.0], coords='primitive',
+                      print_results=False)['long_char']
+    L_shift = _silence(a.analyze, [2.0, 0.1, 0.0], coords='primitive',
+                       print_results=False)['long_char']
+    assert np.allclose(np.sort(L_pure), np.sort(L_shift), atol=1e-10)
+    # and the split is clean: 4 transverse ~0, 2 longitudinal ~1
+    L = np.sort(L_pure)
+    assert np.allclose(L[:4], 0.0, atol=0.02)
+    assert np.allclose(L[4:], 1.0, atol=0.02)
+
+
+def test_aute2_lchar_c2_symmetry(aute2):
+    """For q || b* in C2/m, the on-axis Au atom's longitudinal fraction
+    must be exactly 0 or 1 (C2 eigenmodes have u_Au either || b or ⊥ b),
+    and the two symmetry-equivalent Te atoms must have equal fractions."""
+    from code.single_q_analysis import SingleQAnalyzer
+    xtal, Phi, masses = aute2
+    kT = 207 * const.c * 100 / 1e12
+    a = SingleQAnalyzer(xtal, Phi, masses, kT)
+    r = _silence(a.analyze, [0, 0.2, 0], coords='conventional',
+                 print_results=False)
+
+    qhat = r['Q_reduced_cart'] / np.linalg.norm(r['Q_reduced_cart'])
+    ev = r['eigenvectors']
+    for m in range(3 * xtal.nat):
+        e = ev[:, m, 0].reshape(xtal.nat, 3)
+        frac = []
+        for s in range(xtal.nat):
+            u = e[s] / np.sqrt(masses[s])
+            amp = np.real(np.vdot(u, u))
+            frac.append(np.abs(np.dot(qhat, u))**2 / amp if amp > 1e-14 else np.nan)
+        # Au (atom 0): exactly longitudinal or exactly transverse
+        assert min(abs(frac[0]), abs(frac[0] - 1.0)) < 1e-6, \
+            f"mode {m}: Au fraction {frac[0]} not 0/1"
+        # Te pair symmetry-equivalent
+        assert abs(frac[1] - frac[2]) < 1e-6
+
+
+# ---------------------------------------------------------------------------
 # Sanity: coordinate transforms
 # ---------------------------------------------------------------------------
 
