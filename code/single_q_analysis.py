@@ -636,6 +636,18 @@ def interactive_mode():
     # Create analyzer
     analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
     
+    # Initialize sixcircle interface once (reuse it for all angle calculations)
+    try:
+        try:
+            from .sixcircle_interface import SixCircleInterface
+        except ImportError:
+            from sixcircle_interface import SixCircleInterface
+        sixc = SixCircleInterface()
+        print(f"✓ Sixcircle interface loaded ({'SIMULATION' if sixc.simulation_mode else 'LIVE'})")
+    except Exception as e:
+        sixc = None
+        print(f"⚠ Sixcircle not available: {e}")
+    
     # Default coordinate system
     coord_system = 'conventional'
     freq_unit = 'meV'
@@ -716,31 +728,24 @@ def interactive_mode():
             if current_q is None:
                 print("\n⚠ Enter a Q point first\n")
                 continue
+            if sixc is None:
+                print("\n⚠ Sixcircle not available\n")
+                continue
             try:
-                import sys
-                import io
-                
-                # Suppress sixcircle verbose output
-                old_stdout = sys.stdout
-                sys.stdout = io.StringIO()
-                
-                try:
-                    sixc = SixCircleInterface()
-                finally:
-                    sys.stdout = old_stdout
-                
                 print("\n" + "="* 80)
                 print("Diffractometer Angles" + (" (SIMULATION)" if sixc.simulation_mode else ""))
                 print("="* 80)
                 Q_conv = aute2_prim2conv_k(current_q) if coord_system == 'primitive' else current_q
                 print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
-                angles = sixc.move_to_hkl(tuple(Q_conv), check_only=True)
                 print("\nAngles:")
-                for key, val in angles.items():
-                    print(f"  {key:5s} = {val:7.3f}deg")
+                # Call ca() directly - it prints the angles itself
+                # Convert to Python float (sixcircle doesn't like numpy.float64)
+                sixc.sixc.ca(float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2]))
                 print("="* 80 + "\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
+                import traceback
+                traceback.print_exc()
             continue
         
         elif user_input.lower() == 'move':
@@ -767,6 +772,8 @@ def interactive_mode():
                 print("✓ Complete\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
+                import traceback
+                traceback.print_exc()
             continue
         elif user_input.lower().startswith('sixc '):
             # Pass command to sixcircle

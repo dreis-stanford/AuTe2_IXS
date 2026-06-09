@@ -6,9 +6,9 @@ Python tools for planning Inelastic X-ray Scattering (IXS) experiments on AuTe�
 
 This project integrates:
 - DFT phonon calculations to predict phonon dispersions and eigenvectors
-- Sixcircle diffractometer interface for experiment planning at SPring-8
+- Sixcircle diffractometer interface for experiment planning at SPring-8 
 - Modulated structure handling for CDW satellite reflections
-- Q-point optimization to maximize information from measurements
+- Q-point optimization to maximize information from measurements [not implemented]
 
 ## Quick Start
 
@@ -26,19 +26,19 @@ For SPring-8 users, edit code/config.py to set SIXCIRCLE_PATH
 ## Project Structure
 
 - code/config.py - Configuration
-- code/sixcircle_interface.py - Diffractometer control  
-- code/modulated_structure.py - Satellite reflections
-- code/q_optimizer.py - Q-point optimization
+- code/sixcircle_interface.py - Diffractometer (just calc. no control)  
+- code/modulated_structure.py - Satellite reflections (not implemented)
+- code/q_optimizer.py - Q-point optimization (not impelmented)
 - analyze_q.py - AuTe2 launcher
-- test_integration.py - Integration tests
+- test_integration.py - Integration tests (status unkown)
 
 ## Recent Updates
 
 Sixcircle Integration - 1,184+ lines of new code
 - Diffractometer interface for SPring-8 BL43LXU
 - Modulated structure and satellite handling
-- Q-point optimization
-- Simulation mode for testing
+- Q-point optimization (just framework)
+- Simulation mode for testing 
 
 ## Materials
 
@@ -69,13 +69,14 @@ Reference: Schutte et al., Acta Cryst. B44, 486 (1988)
 ## Recent Updates
 
 ### Output Formatting Improvements (2024)
+- added dummy or0 and or1 used by sixc for calculating angles
 - Standardized all separator lines to exactly 80 characters for consistent terminal display
 - Reorganized output information for better readability:
-  - Temperature, form factors, and scattering parameters in compact header
+  - Temperature, form factors, and scattering parameters in compact header 
   - IXS units and calculation notes moved to footer
 - Enhanced phonon mode table with:
-  - Clear polarization indicators (L=Longitudinal, T=Transverse, M=Mixed)
-  - Eigenvector projections showing Q·e magnitude and relative phase for each atom
-  - IXS cross-sections for both Stokes and anti-Stokes processes
-  - Structure factor information for elastic scattering
+  - Clear polarization indicators (L=Longitudinal, T=Transverse, M=Mixed) not fully debugged
+  - Eigenvector projections showing Q·e magnitude and relative phase for each atom not fully debugged
+  - IXS cross-sections for both Stokes and anti-Stokes processes (not including polarization or DW)
+  - Structure factor information for elastic scattering (not including pol. or DW)
 
