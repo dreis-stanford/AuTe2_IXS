@@ -13,6 +13,10 @@
 - [ ] Test sixcircle loading in non-simulation mode
 - [ ] Integrate `ca6()` for accurate analyzer positions
 - [ ] Replace hardcoded analyzer offsets with real ca6() output
+- [ ] Fix `_setup_simulation_UB` (`code/sixcircle_interface.py`) so the
+      `angles` command produces real simulated angles — see
+      KNOWN_ISSUES.md for the `g_sample`/`setlat()` bug and others
+      likely lurking in the `or0`/`or1` setup
 
 ### 3. Analyzer Array Improvements
 - [ ] Use actual ca6() output for Q-dependent analyzer positions

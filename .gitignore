@@ -37,3 +37,11 @@ Thumbs.db
 *.before_*
 *.broken
 archive/
+
+# Beamline config artifact, restored to project root for sixcircle_rqd's
+# init_rqd() (looks for it in cwd) - see code/sixcircle_interface.py
+BL43XU_CONST.mac
+
+# sixcircle session-state files written as import/setup side effects
+previous.bl.conf
+sixcircle_last_UB

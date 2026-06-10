@@ -633,19 +633,6 @@ class SingleQAnalyzer:
         #notes
         print('\nNotes: IXS units: barn/(unit cell*sr);  DFT uses unmodulated structure (no CDW).')
         print('\n' + '='* 80 + '\n')
-    
-    def _format_xs(val):
-        """Format cross-section value for display"""
-        if val < 1e-20:
-            return '    ~0   '
-        elif val < 0.001:
-            return f'{val:.2e}'
-        elif val < 10:
-            return f'{val:8.3f}'
-        elif val < 10000:
-            return f'{val:8.1f}'
-        else:
-            return f'{val:.2e}'
 
 
 # Material configurations for interactive_mode
@@ -798,9 +785,14 @@ def interactive_mode(material='AuTe2'):
                 Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
                 print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
                 print("\nAngles:")
-                # Call ca() directly - it prints the angles itself
                 # Convert to Python float (sixcircle doesn't like numpy.float64)
-                sixc.sixc.ca(float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2]))
+                hkl = (float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2]))
+                if sixc.simulation_mode:
+                    # _simulate_angles() prints via sixcircle.ca() itself
+                    sixc.move_to_hkl(hkl, check_only=True)
+                else:
+                    # Call ca() directly - it prints the angles itself
+                    sixc.sixc.ca(*hkl)
                 print("="* 80 + "\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
