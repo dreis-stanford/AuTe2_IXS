@@ -1,5 +1,18 @@
 # AuTe2 IXS Analysis - TODO List
 
+## Next Session Priorities (set 2026-06-13)
+
+With the Debye-Waller factor and full dispersion-corrected form factors
+done, the suggested order is:
+
+1. **Measurement planning** (#4) and **wiring up `code/q_optimizer.py`**
+   (currently a standalone, unwired module - see README "Project
+   Structure") - use it to help choose/rank Q-points for the measurement
+   plan.
+2. **Geometry-viz UB refactor** (`code/geometry_viz.py`) - make the 3D
+   scattering-geometry view use the real UB matrix instead of idealized
+   axes (see #6a below).
+
 ## High Priority
 
 ### 1. Add Polarization Factor
@@ -60,7 +73,6 @@
 ## Low Priority
 
 ### 7. Features
-- [ ] Add Debye-Waller factor (currently disabled in config)
 - [ ] Export results to file (CSV, JSON)
 - [ ] Batch analysis mode (multiple Q-points from file)
 - [ ] Plotting functions for dispersion
@@ -80,6 +92,16 @@
 - [x] Add analyzer array analysis
 - [x] Add DFT modulation limitation note
 - [x] Update documentation
+- [x] Add Debye-Waller factor (2026-06-13: `code/debye_waller.py`,
+      `config.DEBYE_WALLER_MODE` = 'none' | 'phonon' (BZ-summed anisotropic
+      U from these force constants at `config.TEMPERATURE`) | 'cif' (fixed
+      298K ADPs from Reithmayer et al., Acta Cryst. B49, 6 1993; AuTe2 only).
+      Default is now 'cif'.)
+- [x] Full energy-dependent form factors (2026-06-13: `calc_form_factor()` in
+      `code/form_factors.py` returns f(Q,E) = f0(Q) + f'(E) + i*f''(E) via
+      xraylib when available, wired into `single_q_analysis.py`. f''
+      sign-convention vs. this codebase's exp(-2*pi*i*Q.r) phase convention
+      verified against the optical theorem; see `tests/test_form_factors.py`.)
 
 ## Notes
 

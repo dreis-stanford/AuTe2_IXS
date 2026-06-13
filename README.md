@@ -29,6 +29,11 @@ For SPring-8 users, edit code/config.py to set SIXCIRCLE_PATH
 - code/sixcircle_interface.py - Diffractometer (just calc. no control)  
 - code/modulated_structure.py - Satellite (CDW) reflection handling, used by
   the `H K L m` input below
+- code/debye_waller.py - Anisotropic Debye-Waller U tensors, from a phonon
+  BZ sum (`'phonon'` mode) or fixed literature ADPs (`'cif'` mode); see
+  `config.DEBYE_WALLER_MODE`
+- code/form_factors.py - Atomic form factors f(Q), and full f(Q,E) =
+  f0(Q) + f'(E) + i*f''(E) via xraylib (`calc_form_factor`)
 - code/q_optimizer.py - Q-point optimization (standalone module, not yet
   wired into the interactive tools)
 - analyze_q.py - AuTe2 launcher
@@ -73,6 +78,27 @@ mode/values and angle limits start from `code/config.py` (`FROZEN_ANGLES`,
 `freeze`/`limits` commands above.
 
 ## Recent Updates
+
+### Debye-Waller factor and dispersion-corrected form factors (2026-06-13)
+- `config.DEBYE_WALLER_MODE` ('none' | 'phonon' | 'cif', default **'cif'**)
+  selects an anisotropic Debye-Waller correction applied to the IXS and
+  elastic structure factors:
+  - `'phonon'`: U tensors from a Monkhorst-Pack BZ sum over these force
+    constants at `config.TEMPERATURE` (`config.DEBYE_WALLER_QMESH`).
+  - `'cif'`: fixed 298K ADPs for AuTe2 from Reithmayer et al., Acta Cryst.
+    B49, 6 (1993); only applied when `material == 'AuTe2'`.
+- `code/form_factors.calc_form_factor()` now returns the full energy-dependent
+  form factor f(Q,E) = f0(Q) + f'(E) + i*f''(E) via xraylib (falls back to
+  the real f0(Q) from Cromer-Mann coefficients if xraylib is unavailable).
+  The sign of xraylib's `Fii` (anomalous f'') was verified against the
+  optical theorem and against this codebase's exp(-2*pi*i*Q.r) phase
+  convention (`code/ixs.py`) — the two sign flips cancel, giving the
+  physically correct (absorptive) |F(Q)|^2. See the docstring of
+  `calc_form_factor` and `tests/test_form_factors.py`.
+- Fixed a stale-state issue where `pa()`/startup banners reported
+  "Si(11 11 11)" (from a cached `previous.bl.conf`) even though calculations
+  correctly used the configured `config.SI_ORDER` (12); the loader now calls
+  `setorder(config.SI_ORDER)` so the cached state and banners stay in sync.
 
 ### Sixcircle integration
 - Diffractometer interface for SPring-8 BL43LXU (1,184+ lines)

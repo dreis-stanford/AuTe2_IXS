@@ -14,7 +14,10 @@
 
 **IXS Cross-sections:**
 - `ixs.py` - IXS cross-section calculation (production code)
-- `form_factors.py` - Atomic form factors
+- `form_factors.py` - Atomic form factors f0(Q), and full f(Q,E) =
+  f0(Q) + f'(E) + i*f''(E) via xraylib (`calc_form_factor`)
+- `debye_waller.py` - Anisotropic Debye-Waller U tensors (phonon BZ sum or
+  literature ADPs; see `config.DEBYE_WALLER_MODE`)
 
 **Crystal Structure:**
 - `aute2_structure.py` - AuTe2 coordinate transformations (C2/m monoclinic)
