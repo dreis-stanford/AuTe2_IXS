@@ -388,6 +388,11 @@ class SixCircleInterface:
             symmetrically. This is the real array geometry, not a bug.
           - 'xi', 'zi': horizontal/vertical grid indices (0-based) into the
             x_n x z_n analyzer array
+          - 'tth', 'gam': absolute (tth, gam) (degrees) for this analyzer,
+            from forward kinematics -- callers needing this analyzer's
+            (tth, gam) (e.g. for the beam-polarization factor) should use
+            these directly rather than re-solving calculate_angles(Q_analyzer),
+            which is far more expensive (nonlinear least-squares).
         """
         if self.sixc is None:
             raise RuntimeError(
@@ -430,6 +435,8 @@ class SixCircleInterface:
                         'dQ': Q_analyzer - Q_center,
                         'dtth': A_tth - ca_tth,
                         'dgam': A_gam - ca_gam,
+                        'tth': A_tth,
+                        'gam': A_gam,
                         'xi': xi,
                         'zi': zi,
                     }

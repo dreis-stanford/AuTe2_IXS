@@ -146,12 +146,12 @@ class SingleQAnalyzer:
                 f"Unknown DEBYE_WALLER_MODE: {config.DEBYE_WALLER_MODE!r}")
 
     def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True,
-                print_detailed=False):
+                print_detailed=False, tth_gam=None):
         """
         Analyze phonons and IXS at single Q-point
-        
+
         Matches MATLAB calcIXS_single_Q_AuTe2.m
-        
+
         Parameters:
         -----------
         Q_input : array-like (3,)
@@ -166,7 +166,13 @@ class SingleQAnalyzer:
             Longitudinal character threshold
         threshold_T : float
             Transverse character threshold
-        
+        tth_gam : tuple (tth, gam) in degrees, optional
+            If given, use these directly for the beam-polarization factor
+            instead of calling self.sixc.calculate_angles(Q_conv) -- avoids
+            sixcircle's expensive nonlinear angle solve when the caller
+            already knows (tth, gam) for this Q (e.g. analyze_array(), which
+            gets them from forward kinematics via analyzer_array_offsets()).
+
         Returns:
         --------
         result : dict
@@ -377,19 +383,22 @@ class SingleQAnalyzer:
         # available; otherwise fall back to the in-plane (gam=0) elastic
         # estimate tth = 2*asin(|Q|*lambda/(4*pi)) -- exact for |Q| within
         # reach of the Ewald sphere, and -> P=1 (no effect) as |Q| -> 4*pi/lambda.
-        angles = None
-        if self.sixc is not None:
-            try:
-                angles = self.sixc.calculate_angles(
-                    (float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2])))
-            except RuntimeError:
-                angles = None
-        if angles is not None:
-            tth_pol, gam_pol = angles['tth'], angles['gam']
+        if tth_gam is not None:
+            tth_pol, gam_pol = tth_gam
         else:
-            sin_half_tth = np.clip(Q_sinThOverLambda * config.WAVELENGTH, -1.0, 1.0)
-            tth_pol = 2 * np.degrees(np.arcsin(sin_half_tth))
-            gam_pol = 0.0
+            angles = None
+            if self.sixc is not None:
+                try:
+                    angles = self.sixc.calculate_angles(
+                        (float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2])))
+                except RuntimeError:
+                    angles = None
+            if angles is not None:
+                tth_pol, gam_pol = angles['tth'], angles['gam']
+            else:
+                sin_half_tth = np.clip(Q_sinThOverLambda * config.WAVELENGTH, -1.0, 1.0)
+                tth_pol = 2 * np.degrees(np.arcsin(sin_half_tth))
+                gam_pol = 0.0
         pol_factor = polarization_factor(tth_pol, gam_pol)
 
         result['polarization_factor'] = pol_factor
@@ -470,7 +479,8 @@ class SingleQAnalyzer:
             sys.stdout = io.StringIO()
             try:
                 result = self.analyze(Q_analyzer, coords='conventional',
-                                     freq_unit=freq_unit, print_results=False)
+                                     freq_unit=freq_unit, print_results=False,
+                                     tth_gam=(info['tth'], info['gam']))
             finally:
                 sys.stdout = old_stdout
 
