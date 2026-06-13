@@ -8,11 +8,12 @@ configured in single_q_analysis_si.py via the same class.
 
 import numpy as np
 import sys
+from . import config
 from .constants import const
 from .force_constants import ForceConstants
 from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
 from .form_factors import CalcAtomicfQ
-from .ixs import calc_ixs
+from .ixs import calc_ixs, polarization_factor
 from .sixcircle_interface import SixCircleInterface
 from .aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
 from .modulated_structure import ModulatedStructure
@@ -62,7 +63,7 @@ class SingleQAnalyzer:
 
     def __init__(self, xtal, Phi, masses, kT_THz,
                  conv2prim=None, prim2conv=None,
-                 enable_satellites=True, material='AuTe2'):
+                 enable_satellites=True, material='AuTe2', sixc=None):
         """
         Initialize analyzer
 
@@ -82,12 +83,22 @@ class SingleQAnalyzer:
             Enable CDW satellite (H K L m) handling (default True; AuTe2)
         material : str
             Material name for printouts
+        sixc : SixCircleInterface, optional
+            If provided, used to compute the actual (tth, gam) scattering
+            angles for each Q (via calculate_angles) so the IXS cross
+            sections include the beam-polarization factor. If None, or if
+            the reflection is inaccessible under the current frozen
+            angles/limits, falls back to an in-plane (gam=0) elastic-Bragg
+            estimate of tth from |Q|; for |Q| >= 4*pi/lambda this estimate
+            saturates at tth=180 deg (polarization_factor=1, i.e. no
+            correction).
         """
         self.xtal = xtal
         self.Phi = Phi
         self.masses = masses
         self.kT_THz = kT_THz
         self.material = material
+        self.sixc = sixc
         self.conv2prim = conv2prim if conv2prim is not None else aute2_conv2prim_k
         self.prim2conv = prim2conv if prim2conv is not None else aute2_prim2conv_k
         self.mod_struct = ModulatedStructure() if enable_satellites else None
@@ -301,6 +312,11 @@ class SingleQAnalyzer:
         result['Q_sinThOverLambda'] = Q_sinThOverLambda
         result['form_factors'] = f_by_element
 
+        # |Q| <= 4*pi/lambda is required for elastic scattering at this
+        # wavelength to reach this Q at any angle; beyond that the
+        # reflection is kinematically unreachable.
+        result['q_reachable'] = Q_sinThOverLambda * config.WAVELENGTH <= 1.0
+
         # Prepare for IXS calculation
         fQ_matrix = np.array([[f_by_element[s] for s in self.symbols]])
         
@@ -311,8 +327,33 @@ class SingleQAnalyzer:
             units='barn', per_steradian=True
         )
         
-        result['IXS_stokes'] = Is.flatten()
-        result['IXS_antistokes'] = Ias.flatten()
+        # Beam-polarization factor P = 1 - sin^2(tth)*cos^2(gam) (horizontal
+        # incident polarization, unanalyzed scattered polarization). Use the
+        # actual (tth, gam) for this reflection from sixcircle when
+        # available; otherwise fall back to the in-plane (gam=0) elastic
+        # estimate tth = 2*asin(|Q|*lambda/(4*pi)) -- exact for |Q| within
+        # reach of the Ewald sphere, and -> P=1 (no effect) as |Q| -> 4*pi/lambda.
+        angles = None
+        if self.sixc is not None:
+            try:
+                angles = self.sixc.calculate_angles(
+                    (float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2])))
+            except RuntimeError:
+                angles = None
+        if angles is not None:
+            tth_pol, gam_pol = angles['tth'], angles['gam']
+        else:
+            sin_half_tth = np.clip(Q_sinThOverLambda * config.WAVELENGTH, -1.0, 1.0)
+            tth_pol = 2 * np.degrees(np.arcsin(sin_half_tth))
+            gam_pol = 0.0
+        pol_factor = polarization_factor(tth_pol, gam_pol)
+
+        result['polarization_factor'] = pol_factor
+        result['tth_pol'] = tth_pol
+        result['gam_pol'] = gam_pol
+
+        result['IXS_stokes'] = Is.flatten() * pol_factor
+        result['IXS_antistokes'] = Ias.flatten() * pol_factor
         result['bose_factor'] = n.flatten()
         result['cross_section_info'] = xs_info
         
@@ -347,54 +388,28 @@ class SingleQAnalyzer:
             Results for each analyzer position
         """
         
-        # Analyzer positions relative to center (from sixcircle ca6 output)
-        # Row and column offsets in (dH, dK, dL) - approximate for now
-        analyzers = {
-            # Row 0 (a03-a09)
-            'a03': (-0.142, -0.146, -0.006),
-            'a04': (-0.095, -0.098, -0.007),
-            'a05': (-0.048, -0.049, -0.035),
-            'a06': (0.000, 0.000, 0.000),  # Center
-            'a07': (0.048, 0.049, 0.034),
-            'a08': (0.096, 0.099, 0.067),
-            'a09': (0.144, 0.149, 0.099),
-            
-            # Row 1 (a14-a20)  
-            'a14': (-0.197, -0.093, -0.006),
-            'a15': (-0.150, -0.045, -0.007),
-            'a16': (-0.103, 0.004, -0.034),
-            'a17': (-0.055, 0.053, 0.001),
-            'a18': (-0.007, 0.102, 0.035),
-            'a19': (0.041, 0.152, 0.068),
-            'a20': (0.089, 0.202, 0.100),
-            
-            # Row 2 (a25-a31)
-            'a25': (-0.252, -0.040, -0.006),
-            'a26': (-0.205, 0.009, -0.007),
-            'a27': (-0.158, 0.057, -0.034),
-            'a28': (-0.110, 0.106, 0.001),
-            'a29': (-0.062, 0.156, 0.035),
-            'a30': (-0.014, 0.205, 0.068),
-            'a31': (0.034, 0.255, 0.100),
-            
-            # Row 3 (a35-a41)
-            'a35': (-0.306, 0.014, -0.006),
-            'a36': (-0.260, 0.062, -0.007),
-            'a37': (-0.212, 0.111, -0.035),
-            'a38': (-0.165, 0.160, 0.000),
-            'a39': (-0.117, 0.209, 0.034),
-            'a40': (-0.069, 0.259, 0.067),
-            'a41': (-0.020, 0.309, 0.099),
-        }
-        
         Q_center = np.asarray(Q_center)
-        
+
         # Convert to conventional if needed
         if coords.lower() == 'primitive':
             Q_center_conv = aute2_prim2conv_k(Q_center)
         else:
             Q_center_conv = Q_center
-        
+
+        # Per-analyzer (dH, dK, dL) offsets for the arm centered on
+        # Q_center_conv, computed from the real UB matrix and the BL43LXU
+        # 7x4 analyzer-array geometry (see SixCircleInterface.analyzer_array_offsets).
+        if self.sixc is None or self.sixc.sixc is None:
+            raise RuntimeError(
+                "analyze_array requires the sixcircle library to compute "
+                "real per-analyzer Q positions (check config.SIXCIRCLE_PATH).")
+        analyzers = self.sixc.analyzer_array_offsets(
+            (float(Q_center_conv[0]), float(Q_center_conv[1]), float(Q_center_conv[2])))
+        if analyzers is None:
+            raise RuntimeError(
+                f"Q={tuple(Q_center_conv)} is inaccessible under the current "
+                f"frozen angles/limits, so no analyzer array can be calculated.")
+
         array_results = []
         
         # Suppress form factor messages during batch calculation
@@ -428,7 +443,8 @@ class SingleQAnalyzer:
 
         print('\n' + '='* 80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
-        print('Note: Analyzer positions approximate, based on BL43LXU geometry at ~30 nm^-1')
+        print('Note: Analyzer (H,K,L) computed from the real UB matrix and the')
+        print('      BL43LXU 7x4 analyzer-array geometry, for the arm centered on this Q.')
         print('='* 80)
         
         # Header
@@ -506,7 +522,17 @@ class SingleQAnalyzer:
         Q_prim = result['Q_prim']
         Q_cart = result['Q_cart']
         Q_mag = result['Q_mag']
-        
+
+        if not result['q_reachable']:
+            Q_max = 4 * np.pi / config.WAVELENGTH
+            print(f'\n|Q|={Q_mag:.2f} (2pi/A)  '
+                  f'Q(conv): [{Q_conv[0]:.2f}, {Q_conv[1]:.2f}, {Q_conv[2]:.2f}] (r.l.u.)  '
+                  f'Q(prim): [{Q_prim[0]:.2f}, {Q_prim[1]:.2f}, {Q_prim[2]:.2f}] (r.l.u.)')
+            print(f'\n⚠ |Q|={Q_mag:.2f} A^-1 exceeds 4*pi/lambda = {Q_max:.2f} A^-1 '
+                  f'(lambda={config.WAVELENGTH:.5f} A) -- unreachable by elastic '
+                  f'scattering at this wavelength. Skipping IXS table.\n')
+            return
+
         # Temperature and form factors
         kT_K = self.kT_THz * const.THz2meV / 1000 / 8.617333262e-5
         ff_str = '  '.join(f'f({s})={f:.1f}'
@@ -539,7 +565,7 @@ class SingleQAnalyzer:
               f'Q(cart): [{Q_cart[0]:.2f}, {Q_cart[1]:.2f}, {Q_cart[2]:.2f}] (2pi/A){gamma_note}')
         print(f'Q(conv): [{Q_conv[0]:.2f}, {Q_conv[1]:.2f}, {Q_conv[2]:.2f}] (r.l.u.)  '
               f'Q(prim): [{Q_prim[0]:.2f}, {Q_prim[1]:.2f}, {Q_prim[2]:.2f}] (r.l.u.)')
-        
+
         # Mode table with separators
         freq_label = {'meV': 'meV', 'cm-1': 'cm^-1', 'THz': 'THz'}[freq_unit]
         freq_data = {'meV': result['frequencies_meV'], 
@@ -548,7 +574,7 @@ class SingleQAnalyzer:
         
         atom_cols = '   '.join(f'{lbl}:Q*e,ph' for lbl in self.atom_labels)
         print('\n' + '='* 80)
-        print(f'Mode  Freq({freq_label:>3s})    IXS(S)   IXS(AS)    Pol   {atom_cols}')
+        print(f'Mode Freq({freq_label:>3s})    {"IXS(S)":>8s}   {"IXS(AS)":>8s}  Pol  {atom_cols}')
         print('-'* 80)
         
         # Phonon modes
@@ -561,16 +587,16 @@ class SingleQAnalyzer:
             # Determine polarization (unified scheme)
             pol = classify_polarization(long_char[i])
             
-            # Format IXS values (0.00 to 999.99)
+            # Format IXS values (0.00 to 99999.99)
             # Show --- for acoustic modes at or near Gamma point
             if at_gamma and freq_data[i] < 1.0:  # Acoustic mode at Gamma
-                ixs_s_str = "   ---"
-                ixs_as_str = "   ---"
+                ixs_s_str = "---"
+                ixs_as_str = "---"
             else:
-                ixs_s = min(999.99, max(0.0, Is[i]))
-                ixs_as = min(999.99, max(0.0, Ias[i]))
-                ixs_s_str = f'{ixs_s:6.2f}'
-                ixs_as_str = f'{ixs_as:6.2f}'
+                ixs_s = min(99999.99, max(0.0, Is[i]))
+                ixs_as = min(99999.99, max(0.0, Ias[i]))
+                ixs_s_str = f'{ixs_s:8.2f}'
+                ixs_as_str = f'{ixs_as:8.2f}'
             
             # Calculate Q*e projections for each atom
             Q_hat_full = Q_cart / Q_mag if Q_mag > 1e-10 else np.zeros(3)
@@ -596,7 +622,7 @@ class SingleQAnalyzer:
                         ev_parts.append(f'{mag:4.2f},{phases_deg[iat]:+4.0f}')
                 ev_str = '    '.join(ev_parts)
             
-            print(f'{i+1:3d}   {freq_data[i]:7.2f}    {ixs_s_str:>6s}   {ixs_as_str:>6s}    {pol:>4s}     {ev_str}')
+            print(f'{i+1:3d}  {freq_data[i]:7.2f}    {ixs_s_str:>8s}   {ixs_as_str:>8s}  {pol:>4s}    {ev_str}')
         
         # Elastic line with structure factor breakdown
         print('-'* 80)
@@ -627,7 +653,7 @@ class SingleQAnalyzer:
             
             elastic_str = '    '.join(elastic_parts)
         
-        print(f'  0      0.00    |F|^2 = {F_squared:8.0f}         El.   {elastic_str}')
+        print(f'  0      0.00    |F|^2 = {F_squared:8.0f}       El.  {elastic_str}')
         print('='* 80)
         
         #notes
@@ -680,20 +706,13 @@ def interactive_mode(material='AuTe2'):
     masses = np.array([xtal.masses[xtal.atom_type_map[i]-1]
                        for i in range(xtal.nat)])
 
-    # Temperature
-    kT_cm = 207  # cm^-1
-    kT_THz = kT_cm * const.c * 100 / 1e12  # cm^-1 -> THz (c in m/s * 100 = cm/s)
+    # Temperature (set config.TEMPERATURE to change)
+    kT_THz = config.TEMPERATURE * const.kb * const.eV2THz
 
-    print(f"Temperature: {kT_cm:.1f} cm^-1 ({kT_THz:.2f} THz)\n")
+    print(f"Temperature: {config.TEMPERATURE:.1f} K ({kT_THz:.2f} THz)\n")
 
-    # Create analyzer
-    analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz,
-                               conv2prim=mat['conv2prim'],
-                               prim2conv=mat['prim2conv'],
-                               enable_satellites=mat['satellites'],
-                               material=mat['name'])
-
-    # Initialize sixcircle interface once (reuse it for all angle calculations)
+    # Initialize sixcircle interface once (reuse it for all angle calculations,
+    # and so the analyzer can compute the beam-polarization factor per Q)
     sixc = None
     if mat['sixcircle']:
         try:
@@ -702,9 +721,18 @@ def interactive_mode(material='AuTe2'):
             except ImportError:
                 from sixcircle_interface import SixCircleInterface
             sixc = SixCircleInterface()
-            print(f"✓ Sixcircle interface loaded ({'SIMULATION' if sixc.simulation_mode else 'LIVE'})")
+            status = "calculation only" if sixc.sixc is not None else "unavailable"
+            print(f"✓ Sixcircle interface loaded ({status})")
         except Exception as e:
             print(f"⚠ Sixcircle not available: {e}")
+
+    # Create analyzer
+    analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz,
+                               conv2prim=mat['conv2prim'],
+                               prim2conv=mat['prim2conv'],
+                               enable_satellites=mat['satellites'],
+                               material=mat['name'],
+                               sixc=sixc)
 
     # Default coordinate system
     coord_system = 'conventional'
@@ -720,12 +748,14 @@ def interactive_mode(material='AuTe2'):
     print("  - Type 'array' to calculate full analyzer array at last Q")
     if mat['sixcircle']:
         print("  - Type 'angles' to calculate diffractometer angles for last Q")
+        print("  - Type 'viz' to show a 3D view of the scattering geometry for last Q")
+        print("  - Type 'freeze' / 'limits' to view or change the angle mode and limits")
     print(f"  - Current system: {coord_system}\n")
     
     current_q = None
     
     while True:
-        print('─' * 80)
+        print('-' * 80)
         user_input = input(f'Enter Q ({coord_system}): ').strip()
         
         # Check if user wants to quit
@@ -779,55 +809,141 @@ def interactive_mode(material='AuTe2'):
                 print("\n⚠ Sixcircle not available\n")
                 continue
             try:
-                print("\n" + "="* 80)
-                print("Diffractometer Angles" + (" (SIMULATION)" if sixc.simulation_mode else ""))
-                print("="* 80)
                 Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
-                print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
-                print("\nAngles:")
-                # Convert to Python float (sixcircle doesn't like numpy.float64)
+                # sixcircle doesn't like numpy.float64
                 hkl = (float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2]))
-                if sixc.simulation_mode:
-                    # _simulate_angles() prints via sixcircle.ca() itself
-                    sixc.move_to_hkl(hkl, check_only=True)
+                print("\n" + "=" * 80)
+                print("Diffractometer Angles (calculation only — no motion)")
+                print("=" * 80)
+                print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
+                print(sixc.describe_constraints())
+                a = sixc.calculate_angles(hkl)
+                if a is None:
+                    print("\n  ⚠ Inaccessible within current angle limits.")
+                    print("    Try 'limits' to widen them or 'freeze' to change mode.")
                 else:
-                    # Call ca() directly - it prints the angles itself
-                    sixc.sixc.ca(*hkl)
-                print("="* 80 + "\n")
+                    print("\n  " + "  ".join(
+                        f"{k}={a[k]:8.3f}" for k in
+                        ('tth', 'th', 'chi', 'phi', 'mu', 'gam')))
+                    print(f"\n  SPEC:  mv tth {a['tth']:.4f} th {a['th']:.4f} "
+                          f"chi {a['chi']:.4f} phi {a['phi']:.4f} "
+                          f"mu {a['mu']:.4f} gam {a['gam']:.4f}")
+                print("=" * 80 + "\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
                 import traceback
                 traceback.print_exc()
             continue
-        
-        elif user_input.lower() == 'move':
-            # Move diffractometer - REAL MOTION!
+
+        elif user_input.lower() in ('viz', 'geo', 'geometry'):
             if current_q is None:
                 print("\n⚠ Enter a Q point first\n")
                 continue
             if sixc is None:
-                print(f"\n⚠ Sixcircle not configured for {analyzer.material}\n")
+                print("\n⚠ Sixcircle not available\n")
                 continue
             try:
-                if sixc.simulation_mode:
-                    print("\n⚠ In simulation mode - cannot move\n")
-                    continue
                 Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
-                print("\n" + "="* 80)
-                print("⚠ WARNING: Will MOVE diffractometer!")
-                print("="* 80)
-                print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
-                confirm = input("\nType 'yes' to confirm: ").strip().lower()
-                if confirm != 'yes':
-                    print("Cancelled\n")
+                hkl = (float(Q_conv[0]), float(Q_conv[1]), float(Q_conv[2]))
+                a = sixc.calculate_angles(hkl)
+                if a is None:
+                    print("\n  ⚠ Inaccessible within current angle limits — "
+                          "nothing to draw.\n")
                     continue
-                print("\nMoving...")
-                sixc.move_to_hkl(tuple(Q_conv), check_only=False)
-                print("✓ Complete\n")
+                save_path = f"scattering_geometry_{hkl[0]:g}_{hkl[1]:g}_{hkl[2]:g}.png"
+                # Launch the 3D view in its own process: it gets its own GUI
+                # event loop (fully rotatable) and the window can be closed any
+                # time without affecting this REPL, which continues immediately.
+                import subprocess
+                angles_arg = ",".join(
+                    f"{a[k]:.6f}" for k in ('tth', 'th', 'chi', 'phi', 'mu', 'gam'))
+                cmd = [sys.executable, '-m', 'code.geometry_viz',
+                       '--angles', angles_arg,
+                       '--hkl', f"{hkl[0]:g},{hkl[1]:g},{hkl[2]:g}",
+                       '--save', save_path]
+                ub = sixc.get_UB()
+                if ub is not None:
+                    cmd += ['--ub', ",".join(f"{x:.10g}" for x in ub.flatten())]
+                try:
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL)
+                    print(f"\n  Opened 3D geometry window (rotatable). "
+                          f"Saved to {save_path}.\n")
+                except Exception as e:
+                    print(f"\n✗ Could not open geometry window: {e}\n")
             except Exception as e:
                 print(f"\n✗ {e}\n")
                 import traceback
                 traceback.print_exc()
+            continue
+
+        elif user_input.lower() == 'freeze':
+            # Show current frozen mode / values
+            if sixc is None:
+                print("\n⚠ Sixcircle not available\n")
+                continue
+            print("\n" + sixc.describe_constraints())
+            print("\n  Usage: 'freeze 456'        set which angles are frozen")
+            print("         'freeze mu=-0.17'   set a frozen angle's value")
+            print("         codes: tth0 th1 chi2 phi3 mu4 gam5 omega6 azimuth7 alpha8 beta9\n")
+            continue
+
+        elif user_input.lower().startswith('freeze '):
+            if sixc is None:
+                print("\n⚠ Sixcircle not available\n")
+                continue
+            try:
+                tokens = user_input.split()[1:]
+                values = {}
+                for tok in tokens:
+                    if '=' in tok:
+                        name, val = tok.split('=', 1)
+                        values[name.strip()] = float(val)
+                    elif tok.isdigit():
+                        sixc.set_frozen(tok)
+                    else:
+                        raise ValueError(f"Cannot parse '{tok}'")
+                if values:
+                    sixc.set_frozen_values(**values)
+                print("\n" + sixc.describe_constraints() + "\n")
+            except Exception as e:
+                print(f"\n✗ {e}\n")
+            continue
+
+        elif user_input.lower() == 'limits':
+            if sixc is None:
+                print("\n⚠ Sixcircle not available\n")
+                continue
+            print("\n" + sixc.describe_constraints())
+            print("\n  Usage: 'limits tth 0 60'   set an angle's [lower, upper]")
+            print("         'limits reset'       restore all to ±180°\n")
+            continue
+
+        elif user_input.lower().startswith('limits '):
+            if sixc is None:
+                print("\n⚠ Sixcircle not available\n")
+                continue
+            try:
+                tokens = user_input.split()[1:]
+                if len(tokens) == 1 and tokens[0].lower() == 'reset':
+                    sixc.reset_limits()
+                elif len(tokens) == 3:
+                    angle, lo, hi = tokens[0], float(tokens[1]), float(tokens[2])
+                    sixc.set_limit(angle, lo, hi)
+                else:
+                    raise ValueError("Usage: 'limits <angle> <lower> <upper>' or 'limits reset'")
+                print("\n" + sixc.describe_constraints() + "\n")
+            except Exception as e:
+                print(f"\n✗ {e}\n")
+            continue
+        
+        elif user_input.lower() == 'move':
+            # This tool is calculation-only; it never drives the diffractometer.
+            print("\n  This is a planning tool — it does not move the "
+                  "diffractometer.")
+            print("  Use 'angles' to get the positions (and a ready-to-paste "
+                  "SPEC command)")
+            print("  to run at the beamline.\n")
             continue
         elif user_input.lower().startswith('sixc '):
             # Pass command to sixcircle
@@ -959,10 +1075,9 @@ if __name__ == "__main__":
     masses = np.array([xtal.masses[xtal.atom_type_map[i]-1] 
                        for i in range(xtal.nat)])
     
-    # Temperature
-    kT_cm = 207
-    kT_THz = kT_cm * const.c * 100 / 1e12  # cm^-1 -> THz (c in m/s * 100 = cm/s)
-    
+    # Temperature (set config.TEMPERATURE to change)
+    kT_THz = config.TEMPERATURE * const.kb * const.eV2THz
+
     # Create analyzer
     analyzer = SingleQAnalyzer(xtal, Phi, masses, kT_THz)
     

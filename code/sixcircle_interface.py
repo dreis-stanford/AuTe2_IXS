@@ -28,9 +28,20 @@ class SixCircleInterface:
         self.simulation_mode = simulation_mode
         self.sixc = None
         self.sixc_rqd = None
-        
-        if not simulation_mode and config.SIXCIRCLE_PATH:
-            self._load_sixcircle()
+
+        # The sixcircle Python package is pure calculation (mv()/br() only
+        # update module-level globals — no hardware I/O), so we load it
+        # whenever it's available, even in simulation mode, to compute real
+        # diffractometer angles. `simulation_mode` only gates the `move`
+        # command in the interactive tool.
+        if config.SIXCIRCLE_AVAILABLE:
+            try:
+                self._load_sixcircle()
+            except Exception as e:
+                if not simulation_mode:
+                    raise
+                print(f"⚠ Could not load sixcircle ({e}); "
+                      f"angle calculation unavailable.")
     
     def _load_sixcircle(self):
         """Load sixcircle module from configured path"""
@@ -57,9 +68,16 @@ class SixCircleInterface:
             # Import sixcircle (won't auto-load config now)
             import sixcircle_rqd
             import sixcircle
-            
+
+            # Populate the BL43LXU analyzer-array geometry globals (x_spac,
+            # z_spac, a_radi, x_n, z_n, x_cen, z_cen, ...) from
+            # BL43XU_CONST.mac, used by analyze_array for per-analyzer
+            # (tth, gam) offsets. Explicit and idempotent, independent of
+            # whatever init_rqd() did at import time via previous.bl.conf.
+            sixcircle_rqd.setbl(config.BEAMLINE)
+
             # Manually initialize all required variables
-            sixcircle.LAMBDA = 0.570118589663309
+            sixcircle.LAMBDA = config.WAVELENGTH
             sixcircle.g_sample = 'AuTe2_exp'
             sixcircle.g_aa = 7.189
             sixcircle.g_bb = 4.407
@@ -78,41 +96,23 @@ class SixCircleInterface:
             sixcircle.g_u10, sixcircle.g_u11, sixcircle.g_u12 = 14.84, 7.42, 0.0
             sixcircle.g_u13, sixcircle.g_u14, sixcircle.g_u15 = 90.0, -0.1719, 0.0
             
-            # Azimuthal reference
-            sixcircle.g_haz, sixcircle.g_kaz, sixcircle.g_laz = 0.0, 0.0, 1.0
-            
-            # Set angle limits (required for ca() function)
-            sixcircle.L_TTH = -180.0
-            sixcircle.U_TTH = 180.0
-            sixcircle.L_TH = -180.0
-            sixcircle.U_TH = 180.0
-            sixcircle.L_CHI = -180.0
-            sixcircle.U_CHI = 180.0
-            sixcircle.L_PHI = -180.0
-            sixcircle.U_PHI = 180.0
-            sixcircle.F_TTH = 0
-            sixcircle.F_TH = 0
-            sixcircle.F_CHI = 0
-            sixcircle.F_PHI = 0
-            sixcircle.L_MU = -180.0
-            sixcircle.U_MU = 180.0
-            sixcircle.L_GAM = -180.0
-            sixcircle.U_GAM = 180.0
-            sixcircle.F_MU = 0
-            sixcircle.F_GAM = 0
-            sixcircle.L_ALPHA = -180.0
-            sixcircle.U_ALPHA = 180.0
-            sixcircle.L_BETA = -180.0
-            sixcircle.U_BETA = 180.0
-            sixcircle.F_ALPHA = 0
-            sixcircle.F_BETA = 0
-            
-            # Calculate UB matrix
-            sixcircle.UB()
-            
+            # Azimuthal reference / surface normal (used for alpha, beta)
+            sn = config.SURFACE_NORMAL
+            sixcircle.g_haz, sixcircle.g_kaz, sixcircle.g_laz = (
+                float(sn[0]), float(sn[1]), float(sn[2]))
+
+            sixcircle.PRE = 4
             self.sixc = sixcircle
             self.sixc_rqd = sixcircle_rqd
-            
+
+            # Frozen mode/values and angle limits from config (these are what
+            # ca()/ca6() use to pick a solution; nothing here moves hardware).
+            self.apply_frozen()
+            self.apply_limits()
+
+            # Calculate UB matrix
+            sixcircle.UB()
+
         finally:
             # Restore config files
             for conf_file, backup in backups:
@@ -120,6 +120,72 @@ class SixCircleInterface:
                     os.rename(backup, conf_file)
         
         print("✓ Sixcircle modules loaded successfully")
+
+    # ------------------------------------------------------------------
+    # Diffractometer modes / constraints (SPEC-like, calculation-only)
+    # ------------------------------------------------------------------
+    # Digit codes used by sixcircle for frozen angles:
+    _ANGLE_CODES = {'0': 'tth', '1': 'th', '2': 'chi', '3': 'phi', '4': 'mu',
+                    '5': 'gam', '6': 'omega', '7': 'azimuth', '8': 'alpha',
+                    '9': 'beta'}
+    _FROZEN_GLOBALS = {'tth': 'F_TTH', 'th': 'F_TH', 'chi': 'F_CHI',
+                       'phi': 'F_PHI', 'mu': 'F_MU', 'gam': 'F_GAM',
+                       'omega': 'F_OMEGA', 'azimuth': 'F_AZIMUTH',
+                       'alpha': 'F_ALPHA', 'beta': 'F_BETA'}
+    _LIMIT_GLOBALS = {'tth': ('L_TTH', 'U_TTH'), 'th': ('L_TH', 'U_TH'),
+                      'chi': ('L_CHI', 'U_CHI'), 'phi': ('L_PHI', 'U_PHI'),
+                      'mu': ('L_MU', 'U_MU'), 'gam': ('L_GAM', 'U_GAM'),
+                      'alpha': ('L_ALPHA', 'U_ALPHA'),
+                      'beta': ('L_BETA', 'U_BETA')}
+
+    def apply_frozen(self):
+        """Push config's frozen mode (FROZEN_ANGLES) and held values
+        (FROZEN_VALUES) into the loaded sixcircle module."""
+        if self.sixc is None:
+            return
+        self.sixc.g_frozen = config.FROZEN_ANGLES
+        for name, gvar in self._FROZEN_GLOBALS.items():
+            setattr(self.sixc, gvar, float(config.FROZEN_VALUES.get(name, 0.0)))
+
+    def apply_limits(self):
+        """Push config's ANGLE_LIMITS into the loaded sixcircle module."""
+        if self.sixc is None:
+            return
+        for name, (lvar, uvar) in self._LIMIT_GLOBALS.items():
+            lo, hi = config.ANGLE_LIMITS[name]
+            setattr(self.sixc, lvar, float(lo))
+            setattr(self.sixc, uvar, float(hi))
+
+    def set_frozen(self, code: str):
+        """Set which three angles are frozen (e.g. '456') and re-apply values."""
+        config.set_frozen_angles(code)
+        self.apply_frozen()
+
+    def set_frozen_values(self, **kwargs):
+        """Set the held values of frozen angles, e.g. set_frozen_values(mu=-0.17)."""
+        config.set_frozen_values(**kwargs)
+        self.apply_frozen()
+
+    def set_limit(self, angle: str, lower: float, upper: float):
+        """Set the (lower, upper) degree limit for one angle and apply it."""
+        config.set_angle_limit(angle, lower, upper)
+        self.apply_limits()
+
+    def reset_limits(self):
+        """Reset all angle limits to ±180° and apply."""
+        config.reset_angle_limits()
+        self.apply_limits()
+
+    def describe_constraints(self) -> str:
+        """Return a human-readable summary of the current frozen mode + limits."""
+        frozen = ", ".join(
+            f"{self._ANGLE_CODES[d]}={config.FROZEN_VALUES.get(self._ANGLE_CODES[d], 0.0):.4g}"
+            for d in config.FROZEN_ANGLES)
+        lines = [f"Frozen ({config.FROZEN_ANGLES}): {frozen}", "Limits (deg):"]
+        for name, (lo, hi) in config.ANGLE_LIMITS.items():
+            flag = "  (default)" if (lo, hi) == (-180.0, 180.0) else ""
+            lines.append(f"    {name:>5}: [{lo:8.3f}, {hi:8.3f}]{flag}")
+        return "\n".join(lines)
 
     def setup_experiment(self):
         """
@@ -245,67 +311,116 @@ class SixCircleInterface:
             'gaps': {'v': agap_v, 'h': agap_h}
         }
     
-    def move_to_hkl(self, hkl: Tuple[float, float, float], 
+    def calculate_angles(self, hkl: Tuple[float, float, float]) -> Optional[Dict[str, float]]:
+        """
+        Calculate the six diffractometer angles for a reflection (no motion).
+
+        Uses sixcircle's ca_s() solver under the current frozen mode and angle
+        limits. Returns a dict {tth, th, chi, phi, mu, gam} for the first valid
+        solution, or None if the reflection is inaccessible within the limits.
+        Raises RuntimeError if the sixcircle library is not loaded.
+        """
+        if self.sixc is None:
+            raise RuntimeError(
+                "Angle calculation requires the sixcircle library, which is "
+                "not loaded (check config.SIXCIRCLE_PATH).")
+        h, k, l = (float(hkl[0]), float(hkl[1]), float(hkl[2]))
+        flag, pos = self.sixc.ca_s(h, k, l)
+        if not flag or not pos:
+            return None
+        tth, th, chi, phi, mu, gam = pos[0][:6]
+        return {'tth': tth, 'th': th, 'chi': chi,
+                'phi': phi, 'mu': mu, 'gam': gam}
+
+    def analyzer_array_offsets(self, hkl: Tuple[float, float, float]
+                                ) -> Optional[Dict[str, np.ndarray]]:
+        """
+        Compute (dH, dK, dL) offsets from hkl for each of the 28 analyzers in
+        the BL43LXU array, for the arm centered on hkl.
+
+        For each analyzer, tth and gam are offset from the center position by
+        the fixed angular steps set by the array geometry (x_spac, z_spac,
+        a_radi, x_n, z_n, x_cen, z_cen from BL43XU_CONST.mac via setbl()),
+        then converted to (H,K,L) via the real UB matrix -- the same
+        (tth, gam) -> (H,K,L) forward-kinematics ca6() uses, without its
+        printing/file output. Analyzer names follow ca6()'s convention
+        (a03-a09, a14-a20, a25-a31, a35-a41).
+
+        Returns a dict {analyzer_name: np.array([dH, dK, dL])}, or None if
+        hkl is inaccessible under the current frozen angles/limits. Raises
+        RuntimeError if sixcircle is not loaded.
+        """
+        if self.sixc is None:
+            raise RuntimeError(
+                "Analyzer array calculation requires the sixcircle library, "
+                "which is not loaded (check config.SIXCIRCLE_PATH).")
+        angles = self.calculate_angles(hkl)
+        if angles is None:
+            return None
+
+        sixc = self.sixc
+        rqd = self.sixc_rqd
+        ca_tth, ca_gam = angles['tth'], angles['gam']
+
+        o_FLAG_WH = sixc.FLAG_WH
+        sixc.FLAG_WH = False
+        try:
+            sixc.mv(tth=ca_tth, th=angles['th'], chi=angles['chi'],
+                    phi=angles['phi'], mu=angles['mu'], gam=ca_gam)
+            Q_center = np.array([sixc.H, sixc.K, sixc.L])
+
+            offsets = {}
+            for zi in range(rqd.z_n):
+                for xi in range(rqd.x_n):
+                    if zi <= 2:
+                        name = 'a' + str(11 * zi + 6 + (xi - rqd.x_cen)).zfill(2)
+                    else:
+                        name = 'a' + str(11 * zi + 6 + (xi - rqd.x_cen) - 1).zfill(2)
+
+                    A_x = rqd.x_off + rqd.x_spac * (xi - rqd.x_cen)
+                    A_z = rqd.z_off + rqd.z_spac * (rqd.z_cen - zi)
+                    # sixcircle's mv() requires plain Python floats (it
+                    # rejects numpy scalars with "Invalid motor position")
+                    A_tth = float(ca_tth + np.degrees(np.arctan2(A_x, rqd.a_radi)))
+                    A_gam = float(ca_gam + np.degrees(
+                        np.arctan2(A_z, np.sqrt(rqd.a_radi**2 + A_x**2))))
+
+                    sixc.mv(tth=A_tth, gam=A_gam)
+                    Q_analyzer = np.array([sixc.H, sixc.K, sixc.L])
+                    offsets[name] = Q_analyzer - Q_center
+
+            # Restore center position
+            sixc.mv(tth=ca_tth, th=angles['th'], chi=angles['chi'],
+                    phi=angles['phi'], mu=angles['mu'], gam=ca_gam)
+        finally:
+            sixc.FLAG_WH = o_FLAG_WH
+
+        return offsets
+
+    def get_UB(self):
+        """Return the 3x3 UB matrix (U @ B) currently loaded in sixcircle, or
+        None if unavailable. Columns of UB are a*, b*, c* in the phi frame;
+        UB @ (h,k,l) is the reciprocal vector, inv(UB).T columns are real a,b,c."""
+        if self.sixc is None:
+            return None
+        return np.array(self.sixc.M_U, float) @ np.array(self.sixc.M_B, float)
+
+    def move_to_hkl(self, hkl: Tuple[float, float, float],
                     check_only: bool = False):
         """
-        Move to (or calculate) angles for given HKL
-        
-        Parameters:
-        -----------
-        hkl : Target (H, K, L)
-        check_only : If True, only calculate without moving
+        Calculate angles for a given HKL.
+
+        This interface is calculation-only and never drives the diffractometer;
+        `check_only` is accepted for backward compatibility but has no effect.
+        Returns the calculated angles (see calculate_angles).
         """
-        if self.simulation_mode:
-            # Calculate angles quietly (caller will print if desired)
-            angles = self._simulate_angles(hkl)
-            return angles
-        
-        if check_only:
-            # Capture output from ca() to parse angles
-            import sys
-            import io
-            from contextlib import redirect_stdout
-            
-            f = io.StringIO()
-            with redirect_stdout(f):
-                self.sixc.ca(*hkl)
-            output = f.getvalue()
-            
-            # Parse angles from output
-            # Look for the line with angle values (after "tth        th ...")
-            angles = {}
-            lines = output.split('\n')
-            for i, line in enumerate(lines):
-                if 'tth' in line and 'th' in line and 'chi' in line:
-                    # Next non-empty line has the values
-                    for j in range(i+1, len(lines)):
-                        if lines[j].strip():
-                            values = lines[j].split()
-                            if len(values) >= 6:
-                                try:
-                                    angles = {
-                                        'tth': float(values[0]),
-                                        'th': float(values[1]),
-                                        'chi': float(values[2]),
-                                        'phi': float(values[3]),
-                                        'mu': float(values[4]),
-                                        'gam': float(values[5])
-                                    }
-                                except (ValueError, IndexError):
-                                    pass
-                            break
-                    break
-            
-            return angles
-        else:
-            self.sixc.br(*hkl)
-            return self.get_current_angles()
-    
+        return self.calculate_angles(hkl)
+
     def get_current_angles(self) -> Dict[str, float]:
-        """Get current diffractometer angles"""
-        if self.simulation_mode:
-            return {'tth': 0, 'th': 0, 'chi': 0, 'phi': 0, 'mu': -0.17, 'gam': 0}
-        
+        """Get the diffractometer angles currently stored in the sixcircle module."""
+        if self.sixc is None:
+            return {'tth': 0, 'th': 0, 'chi': 0, 'phi': 0, 'mu': 0, 'gam': 0}
+
         # Extract angles from sixcircle module variables
         return {
             'tth': self.sixc.TTH,
@@ -314,131 +429,6 @@ class SixCircleInterface:
             'phi': self.sixc.PHI,
             'mu': self.sixc.MU,
             'gam': self.sixc.GAM
-        }
-    
-    def _setup_simulation_UB(self):
-        """
-        Set up UB matrix for simulation mode
-        Assumes: c||z, b||y, a||x at th=chi=phi=mu=gam=0
-        """
-        import numpy as np
-        sys.path.insert(0, config.SIXCIRCLE_PATH)
-        import sixcircle
-        import sixcircle_rqd
-        
-        # Manually initialize required sixcircle globals (avoid ini() which loads files)
-        sixcircle.TTH = 0.0
-        sixcircle.TH = 0.0
-        sixcircle.CHI = 0.0
-        sixcircle.PHI = 0.0
-        sixcircle.MU = 0.0
-        sixcircle.GAM = 0.0
-        sixcircle.LAMBDA = 0.570107  # Si(11,11,11)
-        sixcircle.g_frozen = '456'  # Freeze mu, gam, omega
-        sixcircle.PRE = 4
-        
-        # Set lattice parameters
-        lattice = config.get_lattice_parameters()
-        sixcircle.setlat(
-            lattice['a'], lattice['b'], lattice['c'],
-            lattice['alpha'], lattice['beta'], lattice['gamma']
-        )
-        
-        # Set wavelength
-        sixcircle_rqd.setorder(config.SI_ORDER)
-        
-        # Calculate (0,0,1) angles
-        from .force_constants import ForceConstants
-        from .aute2_structure import aute2_conv2prim_k
-        
-        fc_file = "data/AuTe_2_m.fc"
-        xtal = ForceConstants(fc_file)
-        
-        # (0,0,1) in conventional -> primitive -> Cartesian
-        Q_001_prim = aute2_conv2prim_k(np.array([0, 0, 1]))
-        Q_001_cart = Q_001_prim @ xtal.b_l
-        Q_001_mag = np.linalg.norm(Q_001_cart)
-        
-        wavelength = 0.570107  # Si(11,11,11)
-        theta_001 = np.degrees(np.arcsin(Q_001_mag * wavelength / (4 * np.pi)))
-        
-        # For c||z: need chi=90deg to bring c into horizontal scattering plane
-        or0_angles = {
-            'tth': 2 * theta_001,
-            'th': theta_001,
-            'chi': 90.0,
-            'phi': 0.0,
-            'mu': 0.0,
-            'gam': 0.0
-        }
-        
-        # Calculate (1,0,0) angles  
-        Q_100_prim = aute2_conv2prim_k(np.array([1, 0, 0]))
-        Q_100_cart = Q_100_prim @ xtal.b_l
-        Q_100_mag = np.linalg.norm(Q_100_cart)
-        theta_100 = np.degrees(np.arcsin(Q_100_mag * wavelength / (4 * np.pi)))
-        
-        # For a||x (perpendicular to beam): chi=0, need to rotate about z
-        or1_angles = {
-            'tth': 2 * theta_100,
-            'th': theta_100 - 90.0,
-            'chi': 0.0,
-            'phi': 0.0,
-            'mu': 0.0,
-            'gam': 0.0
-        }
-        
-        # Set motor positions and orientation reflections
-        sixcircle.TTH = or0_angles['tth']
-        sixcircle.TH = or0_angles['th']
-        sixcircle.CHI = or0_angles['chi']
-        sixcircle.PHI = or0_angles['phi']
-        sixcircle.MU = or0_angles['mu']
-        sixcircle.GAM = or0_angles['gam']
-        sixcircle.or0(0, 0, 1)
-        
-        sixcircle.TTH = or1_angles['tth']
-        sixcircle.TH = or1_angles['th']
-        sixcircle.CHI = or1_angles['chi']
-        sixcircle.PHI = or1_angles['phi']
-        sixcircle.MU = or1_angles['mu']
-        sixcircle.GAM = or1_angles['gam']
-        sixcircle.or1(1, 0, 0)
-        
-        print("UB matrix configured (simulation)")
-        print(f"  or0: (0,0,1) at chi=90deg, th={theta_001:.2f}deg")
-        print(f"  or1: (1,0,0) at chi=0deg, th={theta_100-90:.2f}deg")
-        
-        self._ub_initialized = True
-
-    def _simulate_angles(self, hkl):
-        """Calculate angles using sixcircle UB matrix in simulation mode"""
-        import numpy as np
-        
-        if not hasattr(self, '_ub_initialized') or not self._ub_initialized:
-            self._setup_simulation_UB()
-        
-        sys.path.insert(0, config.SIXCIRCLE_PATH)
-        import sixcircle
-        
-        # Use sixcircle to calculate angles
-        h, k, l = hkl
-        try:
-            sixcircle.ca(h, k, l)
-        except Exception as e:
-            import traceback
-            print(f"\nError in sixcircle.ca({h}, {k}, {l}):")
-            traceback.print_exc()
-            raise
-        
-        # Return calculated angles
-        return {
-            'tth': sixcircle.A[0],
-            'th': sixcircle.A[1],
-            'chi': sixcircle.A[2],
-            'phi': sixcircle.A[3],
-            'mu': sixcircle.A[4],
-            'gam': sixcircle.A[5]
         }
 
     def save_configuration(self, filename: str):

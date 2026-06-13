@@ -9,20 +9,24 @@
 - [ ] Document effect on intensity predictions
 
 ### 2. Fix Sixcircle/YAML Integration
+- [x] Fix the `angles` command so it produces real diffractometer angles
+      (2026-06-12: load the library in all modes, compute via `ca_s()`;
+      deleted the broken `_setup_simulation_UB`/`_simulate_angles`). See
+      KNOWN_ISSUES.md "Resolved".
+- [x] SPEC-like frozen mode/values and angle limits, configurable in
+      `config.py` and editable at runtime via `freeze`/`limits` commands.
 - [ ] Install yaml module (`pip install pyyaml`)
-- [ ] Test sixcircle loading in non-simulation mode
-- [ ] Integrate `ca6()` for accurate analyzer positions
-- [ ] Replace hardcoded analyzer offsets with real ca6() output
-- [ ] Fix `_setup_simulation_UB` (`code/sixcircle_interface.py`) so the
-      `angles` command produces real simulated angles — see
-      KNOWN_ISSUES.md for the `g_sample`/`setlat()` bug and others
-      likely lurking in the `or0`/`or1` setup
+- [x] Integrate `ca6()` for accurate analyzer positions
+      (2026-06-12: `SixCircleInterface.analyzer_array_offsets()` computes
+      per-analyzer (dH,dK,dL) via the real UB matrix + BL43LXU 7x4 array
+      geometry, matching ca6()'s math/naming convention)
+- [x] Replace hardcoded analyzer offsets with real ca6() output
+- [ ] `setup_experiment()` still uses a 6-arg `setlat()` that blocks on
+      `input()` (live setup path; not used by the interactive tools) —
+      see KNOWN_ISSUES.md.
 
 ### 3. Analyzer Array Improvements
-- [ ] Use actual ca6() output for Q-dependent analyzer positions
-- [ ] Add coordinate system handling (ensure conventional units)
-- [ ] Option to control number of modes displayed
-- [ ] Option to set analyzer gaps interactively
+- [x] Use actual ca6() output for Q-dependent analyzer positions
 
 ## Medium Priority
 
@@ -43,6 +47,15 @@
 - [ ] Compare with MATLAB results (if available)
 - [ ] Verify satellite phonon calculations
 - [ ] Cross-check IXS intensities
+
+### 6a. Geometry Visualization (`viz` / `code/geometry_viz.py`)
+- [ ] Default 3D view: orient the camera so the lab z-axis points mostly
+      "up" on screen (currently an arbitrary default elevation/azimuth).
+- [ ] Double-check the lab-frame axis conventions (origin/sense of the
+      th and tth rotations) against the sixcircle documentation
+      (`~/Documents/MyPython/Others/sixcircle_1p85/sixcircle_documentation/`)
+      to confirm `verify_scattering.rotate_Q_to_lab_frame` matches the real
+      instrument, not just an internally-consistent convention.
 
 ## Low Priority
 

@@ -1,39 +1,33 @@
 # Known Issues
 
-### `angles` command in simulation mode still doesn't produce angles
-**Open, 2026-06-10.** The `angles` interactive command no longer crashes with
-`AttributeError: 'NoneType' object has no attribute 'ca'` (fixed: it now
-dispatches through `SixCircleInterface.move_to_hkl(hkl, check_only=True)`,
-which calls `_simulate_angles`/`_setup_simulation_UB` in simulation mode).
-
-However, `_setup_simulation_UB` (`code/sixcircle_interface.py`) itself appears
-never to have been exercised end-to-end and has at least two bugs:
-
-1. **`sv_radi` NameError on `import sixcircle_rqd`** — the external module's
-   `init_rqd()` looks for `BL43XU_CONST.mac` in the cwd; without it, it falls
-   into a broken `setincident(9)` fallback. *Worked around* by restoring
-   `BL43XU_CONST.mac` to the project root (gitignored — it was moved to
-   `archive/beamline_config/` in `5b2773e`). Side effect: this import also
-   writes `previous.bl.conf` to the cwd (also gitignored).
-2. **`g_sample` NameError / blocking `input()` in `sixcircle.setlat()`**
-   (`_setup_simulation_UB` line ~342) — `_setup_simulation_UB` never sets
-   `sixcircle.g_sample` (unlike `_load_sixcircle`, which sets it to
-   `'AuTe2_exp'`), and calling `setlat()` with 6 args triggers
-   `input('\nSample description...')`, which references the unset global and
-   would also block on stdin. Needs `sixcircle.g_sample = ...` set first, and
-   a 7th arg passed to `setlat()` to skip the prompt.
-
-The same `setlat()` 6-arg blocking-`input()` pattern also affects the *live*
-path: `SixCircleInterface.setup_experiment()` (`code/sixcircle_interface.py`
-line ~146) calls `self.sixc.setlat(...)` with 6 args and hangs/`EOFError`s on
-non-interactive runs (confirmed via `code/test_sixcircle_integration.py`,
-pre-existing — not introduced by recent changes). Same fix needed: pass a 7th
-`g_sample` arg.
-
-Likely more issues beyond this in the `or0`/`or1` orientation setup. Tracked
-under TODO #2 ("Fix Sixcircle/YAML Integration").
+### `setup_experiment()` setlat() blocking `input()` (live setup path only)
+**Open, 2026-06-12.** `SixCircleInterface.setup_experiment()`
+(`code/sixcircle_interface.py`) calls `self.sixc.setlat(...)` with 6 args,
+which triggers `input('\nSample description...')` and hangs/`EOFError`s on
+non-interactive runs. This path is **not** used by the interactive tools — only
+by `code/test_sixcircle_integration.py` — so it doesn't affect `analyze_q.py`.
+Fix when needed: pass a 7th `g_sample` arg to `setlat()` (the same blocking
+pattern, now avoided in `_load_sixcircle`, which sets globals directly and
+never calls the 6-arg `setlat`).
 
 ## Resolved
+
+### `angles` command didn't produce angles
+**Resolved 2026-06-12.** The interactive `angles` command now produces real
+diffractometer angles in both modes. Root cause was a broken parallel
+`_setup_simulation_UB`/`_simulate_angles` path that re-imported the sixcircle
+library badly (no cwd config-file guard → `KeyError`/`sv_radi` NameError),
+never set `g_sample` or the angle limits, and read a nonexistent
+`sixcircle.A[...]` array (`ca()` only sets `outcaTTH/TH/CHI/PHI`).
+
+Fix: since the sixcircle package is pure calculation (`mv()`/`br()` only
+update module globals — no hardware I/O), the interface now loads the library
+whenever it's available (even in "simulation mode") and computes angles via
+`ca_s()`, which returns all six angles directly. The broken
+`_setup_simulation_UB`/`_simulate_angles` were deleted. Frozen mode/values and
+angle limits are now driven by `config.py` (`FROZEN_ANGLES`, `FROZEN_VALUES`,
+`ANGLE_LIMITS`) and editable at runtime via the new `freeze`/`limits` commands.
+Regression tests: `tests/test_sixcircle_angles.py`.
 
 ### Longitudinal Character Calculation - Silicon [100] Direction
 **Resolved 2026-06-09.** Root cause: per-atom eigenvector extraction used

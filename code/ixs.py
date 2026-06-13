@@ -166,6 +166,25 @@ def calc_ixs(w, ev, Q_rlu, b_l, xs, fQ, masses, kT,
     return Is, Ias, n, F, cross_section_info
 
 
+def polarization_factor(tth_deg, gam_deg=0.0):
+    """
+    Thomson-scattering polarization factor for horizontally polarized
+    (lab x-direction) incident synchrotron radiation, with the scattered
+    polarization unanalyzed.
+
+    P = 1 - (k_out_hat . x_hat)^2 = 1 - sin^2(tth) * cos^2(gam)
+
+    where tth (2theta) and gam are the sixcircle scattering angles (degrees)
+    defining k_out in the lab frame (see verify_scattering.py). At gam=0,
+    P = cos^2(tth): the incident polarization lies in the horizontal
+    scattering plane, so this is the "pi" (in-plane) factor. Only sin^2/cos^2
+    enter, so the sign of tth or gam (branch choice) does not matter.
+    """
+    tth = np.radians(tth_deg)
+    gam = np.radians(gam_deg)
+    return 1.0 - (np.sin(tth) * np.cos(gam))**2
+
+
 if __name__ == "__main__":
     import sys
     import os

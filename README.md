@@ -57,11 +57,20 @@ Reference: Schutte et al., Acta Cryst. B44, 486 (1988)
 
 ## Interactive Commands
 - `H K L [m]` - Analyze Q-point (optional m for satellites)
-- `angles` - Calculate diffractometer angles
+- `angles` - Calculate diffractometer angles for the last Q (calculation only;
+  also prints a ready-to-paste SPEC `mv` command)
+- `freeze` - Show/set the frozen-angle mode and held values, e.g.
+  `freeze 456` (freeze mu, gam, omega) or `freeze mu=-0.17`
+- `limits` - Show/set angle limits, e.g. `limits tth 0 60` (selects the
+  positive-tth solution branch) or `limits reset`
 - `conv`, `prim`, `cart` - Switch coordinate systems
 - `meV`, `THz`, `invcm` - Switch frequency units
-- `move` - Move diffractometer (with confirmation)
 - `sixc <cmd>` - Pass command to sixcircle
+
+Note: this is a planning tool — it never drives the diffractometer. Frozen
+mode/values and angle limits start from `code/config.py` (`FROZEN_ANGLES`,
+`FROZEN_VALUES`, `ANGLE_LIMITS`) and can be changed at runtime with the
+`freeze`/`limits` commands above.
 
 ## Recent Updates
 
