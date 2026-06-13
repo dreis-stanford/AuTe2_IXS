@@ -79,9 +79,17 @@ def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None, grid=None)
     if vmax <= vmin:
         vmax = vmin + 1.0
 
+    MIN_AREA = 3.0    # marker area, points^2
+    MAX_AREA = 215.0  # marker area, points^2
+    MIN_RADIUS = np.sqrt(MIN_AREA)
+    MAX_RADIUS = np.sqrt(MAX_AREA)
+
     def sizes_for(vals):
+        # Linear in radius (not area) so the visual size differences
+        # between small and large IXS values are more pronounced.
         frac = np.clip((vals - vmin) / (vmax - vmin), 0.0, 1.0)
-        return 15.0 + frac * 200.0  # marker area, points^2
+        radius = MIN_RADIUS + frac * (MAX_RADIUS - MIN_RADIUS)
+        return radius**2  # marker area, points^2 (matplotlib scatter `s`)
 
     ncols = 3
     nrows = int(np.ceil(n_modes / ncols))
