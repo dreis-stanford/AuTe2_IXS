@@ -66,8 +66,8 @@ Reference: Schutte et al., Acta Cryst. B44, 486 (1988)
   also prints a ready-to-paste SPEC `mv` command)
 - `array` - Plot phonon frequency contours and IXS Stokes intensities across
   the BL43LXU analyzer array for the last Q, over a wider Δtth/Δγ background
-- `viz` - Open a rotatable 3D view (top-down on the scattering plane) of the
-  diffractometer geometry for the last Q
+- `viz` - Open a rotatable 3D view (oriented to show the front crystal face)
+  of the diffractometer geometry for the last Q
 - `freeze` - Show/set the frozen-angle mode and held values, e.g.
   `freeze 456` (freeze mu, gam, omega) or `freeze mu=-0.17`
 - `limits` - Show/set angle limits, e.g. `limits tth 0 60` (selects the
@@ -95,10 +95,14 @@ mode/values and angle limits start from `code/config.py` (`FROZEN_ANGLES`,
   Also ~25x faster (avoids redundant angle solves per analyzer).
 - `viz` command: the 3D scattering-geometry view now derives the crystal
   frame (surface normal, a/b/c axes) from the real UB matrix
-  (`SixCircleInterface.get_UB()`), and defaults to a top-down view of the
-  (horizontal) scattering plane -- incident beam horizontal from the left,
-  and the scattered beam's sin(tth)/cos(tth) components vertical/horizontal
-  on screen (tth>0 points up).
+  (`SixCircleInterface.get_UB()`), and defaults to a view of the (horizontal)
+  scattering plane oriented to show the front (mounted) crystal face --
+  incident beam (k_in) points right (travels left-to-right), the scattered
+  beam (k_out) points right-and-down for tth>0, and the exposed crystal face
+  (+c*) faces the viewer across the chi range checked (-88..+75 deg) for the
+  real UB. Bulk/side crystal faces are opaque so the front face stands out;
+  the legend was replaced with on-plot labels for k_in/k_out/Q/a/b/c/n (n now
+  shows its HKL).
 
 ### Debye-Waller factor and dispersion-corrected form factors (2026-06-13)
 - `config.DEBYE_WALLER_MODE` ('none' | 'phonon' | 'cif', default **'cif'**)

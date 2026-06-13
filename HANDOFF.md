@@ -5,10 +5,10 @@
 Commits today: `b151502` (Debye-Waller modes + full f(Q,E) via xraylib),
 `3fd54a6` (Si-order/previous.bl.conf sync fix), `cfb2d76` (array command
 ~25x speedup), `b5a9f9a` (wider-region analyzer-array grid background),
-`b6737f0` (analyzer-array plot range/IXS-scale/axis declutter), plus
-uncommitted changes to `code/array_viz.py` (linear-radius marker size) and
-`code/geometry_viz.py` (top-down default view). All but the last two are
-pushed to `origin/main`.
+`b6737f0` (analyzer-array plot range/IXS-scale/axis declutter), `936f6e7`
+(array marker linear-radius sizing), `078f063` (geometry_viz top-down view,
+later superseded), `0726281` (docs refresh), plus this session's
+geometry_viz front-face-view correction (pending commit/push).
 
 ## Completed this session
 
@@ -69,15 +69,27 @@ pushed to `origin/main`.
   + `ub=`/`--ub` arg to `plot_scattering_geometry`/the CLI; surface normal =
   c* = `UB @ hkl`, real axes a,b,c = columns of `inv(UB).T`, rotated to lab
   via `rotate_Q_to_lab_frame`. Idealized-axes fallback kept for `ub=None`.
-- **Top-down default view** (this session, uncommitted):
-  `ax.view_init(elev=90, azim=-90, roll=90)` gives a top-down view of the
-  (horizontal) scattering plane: k_in (mu=0) is horizontal, arriving from
-  the left; k_out's sin(tth) component points up on screen for tth>0 and
-  cos(tth) is horizontal -- i.e. how the experiment looks from above.
-  Verified numerically (`_kin_hat`/`_kout_hat` projections) and visually
-  (`/tmp/viz_top_clean.png`). The lab-frame reference triad moved to the
-  empty upper-right corner (screen_x=-y_lab, screen_y=+x_lab); z (lab
-  vertical) now points at the viewer, so its axis ticks are hidden.
+- **Front-face default view** (this session, pending commit): superseding the
+  earlier top-down view (`078f063`), `ax.view_init(elev=-90, azim=-90,
+  roll=-90)` (screen_x=-y_lab, screen_y=-x_lab, -z_lab toward viewer). k_in
+  points right (beam travels left-to-right); k_out points right-and-down for
+  tth>0. The exposed crystal face (+c*) faces the viewer whenever n_lab_z<0
+  -- verified true at 7 representative reflections spanning chi from -87.6
+  to +75.3 deg for the real UB, so the front face stays visible across this
+  range. Bulk/side crystal faces are now opaque (alpha 0.30 -> 0.95). The
+  legend was removed; k_in/k_out/Q are now labeled directly on the plot
+  (color-matched), and the surface-normal label shows its HKL (`n (001)`).
+  The lab-frame reference triad moved to the new empty corner.
+- **z-order fix** (this session, pending commit): `ax.computed_zorder =
+  False` -- mplot3d's automatic depth-sorting could place k_in/k_out/Q
+  behind the now-opaque crystal faces (one average depth per artist); draw
+  order (slab faces added first) now guarantees the vectors render on top.
+  Verified visually across all 4 spot-checked reflections
+  (`/tmp/viz_z_101.png`, `/tmp/viz_z_115.png`, `/tmp/viz_z_200.png`,
+  `/tmp/viz_z_002.png`).
+- Crystal axes a,b,c are real-space direct lattice vectors (`inv(UB).T`
+  columns); the surface normal n is a reciprocal-space vector (c* = `UB @
+  hkl`).
 
 ## Next steps (not yet started)
 
@@ -87,7 +99,7 @@ pushed to `origin/main`.
    measurement plan (CDW b-axis modes, satellite positions, diffractometer
    accessibility via `ANGLE_LIMITS`, estimated measurement times).
 2. **Verify lab-frame axis conventions** (TODO #6a, second bullet): the
-   top-down view's k_in/k_out/tth geometry is self-consistent with
+   view's k_in/k_out/tth geometry is self-consistent with
    `_kin_hat`/`_kout_hat`, but the th/chi/phi rotation sense vs. the real
    BL43LXU instrument is still unverified against the sixcircle
    documentation.

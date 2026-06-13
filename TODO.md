@@ -69,14 +69,24 @@ order is:
       CLI; surface normal = c* = `UB @ hkl`, real axes a,b,c = columns of
       `inv(UB).T`, both rotated to lab via `rotate_Q_to_lab_frame`. Idealized
       axes remain as a fallback when `ub=None`.
-- [x] Default 3D view: top-down view of the (horizontal) scattering plane
-      (2026-06-13: `ax.view_init(elev=90, azim=-90, roll=90)`). Incident
-      beam (k_in, mu=0) is horizontal, arriving from the left; k_out's
-      sin(tth) component points up on screen for tth>0 and its cos(tth)
-      component is horizontal -- matching how the experiment looks from
-      above. The lab-frame reference triad moved to the empty upper-right
-      corner; z (lab vertical) now points at the viewer, so its axis ticks
-      are hidden (collapse to a point) and it's labeled only in the triad.
+- [x] Default 3D view: view of the (horizontal) scattering plane oriented
+      to show the front (mounted) crystal face
+      (2026-06-13: `ax.view_init(elev=-90, azim=-90, roll=-90)`, superseding
+      the earlier `elev=90, azim=-90, roll=90` top-down view from the same
+      day). Incident beam (k_in, mu=0) points right (travels left-to-right);
+      k_out points right-and-down for tth>0 (screen_x=-y_lab,
+      screen_y=-x_lab, -z_lab toward viewer). The exposed crystal face (+c*)
+      faces the viewer whenever n_lab_z<0 -- true across chi roughly
+      -88..+75 deg for the real UB (checked at 7 representative reflections),
+      so the front face stays visible across this range. Bulk/side faces are
+      now opaque (alpha 0.30 -> 0.95) so they clearly sit behind the front
+      face. The legend was removed; k_in/k_out/Q are now labeled directly on
+      the plot (color-matched), and the surface-normal label shows its HKL,
+      e.g. `n (001)`. The lab-frame reference triad moved to the new empty
+      corner. Also fixed a z-ordering bug (`ax.computed_zorder = False`)
+      where mplot3d's automatic depth-sorting could place k_in/k_out/Q
+      behind the now-opaque crystal faces; draw order now guarantees they
+      render on top.
 - [ ] Double-check the lab-frame axis conventions (origin/sense of the
       th and tth rotations) against the sixcircle documentation
       (`~/Documents/MyPython/Others/sixcircle_1p85/sixcircle_documentation/`)

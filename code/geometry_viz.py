@@ -182,6 +182,13 @@ def plot_scattering_geometry(angles, hkl=None, surface_normal=None, ub=None,
     axis_colors = {'a': '#1b9e77', 'b': '#7570b3', 'c': '#d95f02'}
     c_kin, c_kout, c_Q, c_norm = '#e6194b', '#4363d8', 'black', '#e7298a'
 
+    # mplot3d's automatic z-ordering picks a single average depth per artist,
+    # which can place a vector arrow that touches the (now-opaque) crystal
+    # faces entirely behind them. Disable it and rely on draw order instead:
+    # the slab faces are added first (drawn first/behind), everything added
+    # afterwards (vectors, labels, arcs) draws on top.
+    ax.computed_zorder = False
+
     # --- Rectangular crystal slab, centered on the sample -------------------
     # Thin along the surface normal; broad faces follow the in-plane crystal
     # axes (a preferred for the long edge), so you see the crystal rotate.
@@ -197,22 +204,28 @@ def plot_scattering_geometry(angles, hkl=None, surface_normal=None, ub=None,
     bulk_faces = [f for i, f in enumerate(faces) if i != 1]
     ax.add_collection3d(Poly3DCollection(
         bulk_faces, facecolor='#9ecae1', edgecolor='0.25',
-        linewidths=0.8, alpha=0.30))
+        linewidths=0.8, alpha=0.95))
     ax.add_collection3d(Poly3DCollection(
         [front_face], facecolor='#fd8d3c', edgecolor='#b35806',
-        linewidths=1.8, alpha=0.85))
+        linewidths=1.8, alpha=0.95))
 
     # Crystal axes (rotated) anchored at the sample.
     for name, vv in crystal.items():
         _arrow(ax, (0, 0, 0), 0.8 * vv, color=axis_colors[name],
                label=name, lw=3.0, label_scale=1.12)
-    # Surface normal.
-    _arrow(ax, (0, 0, 0), 0.95 * n_lab, color=c_norm, lw=2.2, label='n')
+    # Surface normal (a reciprocal-space vector, c* = UB @ hkl; the a,b,c
+    # arrows above are the real-space lattice vectors).
+    sn_str = f'{surface_normal[0]:g}{surface_normal[1]:g}{surface_normal[2]:g}'
+    _arrow(ax, (0, 0, 0), 0.95 * n_lab, color=c_norm, lw=2.2,
+           label=f'n ({sn_str})')
 
-    # --- Beams and Q (identified in the legend to avoid label clutter) ------
+    # --- Beams and Q (labeled directly on the plot) -------------------------
     _arrow(ax, -k_in, k_in, color=c_kin, lw=2.5)        # incident, into sample
-    _arrow(ax, (0, 0, 0), k_out, color=c_kout, lw=2.5)  # scattered, out of sample
-    _arrow(ax, (0, 0, 0), Q, color=c_Q, lw=3.5)         # momentum transfer
+    ax.text(*(-1.15 * k_in), 'k_in', color=c_kin, fontsize=11, fontweight='bold')
+    _arrow(ax, (0, 0, 0), k_out, color=c_kout, lw=2.5,  # scattered, out of sample
+           label='k_out', label_scale=1.12)
+    _arrow(ax, (0, 0, 0), Q, color=c_Q, lw=3.5,         # momentum transfer
+           label='Q', label_scale=1.18)
     ax.plot([k_in[0], k_out[0]], [k_in[1], k_out[1]], [k_in[2], k_out[2]],
             color=c_Q, ls=':', lw=1.2, alpha=0.6)        # triangle closure
     ax.scatter([0], [0], [0], color='black', s=30)
@@ -240,36 +253,18 @@ def plot_scattering_geometry(angles, hkl=None, surface_normal=None, ub=None,
         # 2theta is read directly from the k_out direction (no tth circle/pad).
 
     # --- Fixed lab frame, offset to the (empty) upper-right corner ----------
-    # With the top-down view (screen_x = -y_lab, screen_y = +x_lab), the
-    # upper-right of the screen is x_lab>0, y_lab<0. The z arrow (lab
-    # vertical) points straight at the viewer in this view, so it renders
-    # as a short stub/point -- expected for a top-down view.
+    # With this view (screen_x = -y_lab, screen_y = -x_lab), the upper-right
+    # of the screen is x_lab<0, y_lab<0. -z_lab points toward the viewer, so
+    # the z arrow (lab vertical) points away from the viewer here and renders
+    # as a short stub/point. Place the triad slightly toward the viewer
+    # (z_lab<0) so it isn't hidden behind the crystal slab.
     lim = 1.4
-    lab_origin = np.array([lim * 0.85, -lim * 0.85, lim * 0.80])
+    lab_origin = np.array([-lim * 0.85, -lim * 0.85, -lim * 0.80])
     lab_len = 0.35  # deliberately smaller than k_in (=1): just a reference
     for axis_vec, name in [((lab_len, 0, 0), 'x'), ((0, lab_len, 0), 'y'),
                            ((0, 0, lab_len), 'z')]:
         _arrow(ax, lab_origin, axis_vec, color='0.25', lw=1.8,
                label=name, label_scale=1.25)
-
-    # Legend (high-contrast on white).
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-    handles = [
-        Line2D([0], [0], color=c_kin, lw=2.5, label='k_in (incident)'),
-        Line2D([0], [0], color=c_kout, lw=2.5, label='k_out (scattered)'),
-        Line2D([0], [0], color=c_Q, lw=3.5, label='Q = k_out - k_in'),
-        Line2D([0], [0], color=axis_colors['a'], lw=3.0, label='crystal a'),
-        Line2D([0], [0], color=axis_colors['b'], lw=3.0, label='crystal b'),
-        Line2D([0], [0], color=axis_colors['c'], lw=3.0, label='crystal c'),
-        Line2D([0], [0], color=c_norm, lw=2.2,
-               label=f'surface normal ({surface_normal[0]:g}{surface_normal[1]:g}{surface_normal[2]:g})'),
-        Patch(facecolor='#9ecae1', edgecolor='0.25', alpha=0.5, label='crystal'),
-        Patch(facecolor='#fd8d3c', edgecolor='0.25', alpha=0.5, label='front face (beam)'),
-        Line2D([0], [0], color='0.25', lw=1.8, label='lab x, y, z (corner)'),
-    ]
-    ax.legend(handles=handles, loc='upper left', fontsize=9,
-              framealpha=0.9, edgecolor='0.3')
 
     # Cosmetics: equal aspect, fixed limits, view onto the scattering plane.
     ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim); ax.set_zlim(-lim, lim)
@@ -278,16 +273,20 @@ def plot_scattering_geometry(angles, hkl=None, surface_normal=None, ub=None,
     except Exception:
         pass
     ax.set_xlabel('x'); ax.set_ylabel('y')
-    # Top-down view of the (horizontal) scattering plane: looking along -z
-    # (lab vertical), with screen_x = -y_lab and screen_y = +x_lab. This
-    # puts k_in (along -y at mu=0) pointing right (beam arrives from the
-    # left), and k_out's sin(tth) component along +x_lab pointing up for
-    # tth > 0 -- i.e. exactly how the experiment looks viewed from above.
-    # z (lab vertical) now points at the viewer, so its ticks collapse to a
+    # View onto the (horizontal) scattering plane, oriented to show the front
+    # (mounted) crystal face: viewed from -z_lab (lab vertical) looking toward
+    # +z_lab, with screen_x = -y_lab and screen_y = -x_lab. This puts k_in
+    # (along -y at mu=0) pointing right (beam travels left-to-right), and
+    # k_out's sin(tth) component along -x_lab pointing down for tth > 0 --
+    # i.e. the scattered beam goes right and down. -z_lab points toward the
+    # viewer, so the exposed crystal face (+c*, n_lab) faces the viewer
+    # whenever n_lab_z < 0 -- true across the chi range checked for this UB
+    # (chi roughly -88..+75 deg).
+    # z (lab vertical) is the depth axis here, collapsing its ticks to a
     # point on screen -- hide them (the lab-frame triad still labels z).
     ax.set_zticks([])
     ax.set_zlabel('')
-    ax.view_init(elev=90, azim=-90, roll=90)
+    ax.view_init(elev=-90, azim=-90, roll=-90)
 
     if title is None:
         hkl_str = f"  HKL=({hkl[0]:g}, {hkl[1]:g}, {hkl[2]:g})" if hkl is not None else ""
