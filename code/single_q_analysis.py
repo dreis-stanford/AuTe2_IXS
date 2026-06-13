@@ -12,7 +12,7 @@ from . import config
 from .constants import const
 from .force_constants import ForceConstants
 from .phonons import calc_Dq, calc_freq_eig, convert_frequencies
-from .form_factors import CalcAtomicfQ
+from .form_factors import calc_form_factor
 from .ixs import calc_ixs, polarization_factor
 from .sixcircle_interface import SixCircleInterface
 from .aute2_structure import aute2_conv2prim_k, aute2_prim2conv_k
@@ -115,6 +115,24 @@ class SingleQAnalyzer:
             else:
                 seen[s] = seen.get(s, 0) + 1
                 self.atom_labels.append(f'{s}{seen[s]}')
+
+        # Debye-Waller factor (see code/debye_waller.py)
+        self.dw_U = None
+        if config.DEBYE_WALLER_MODE == 'phonon':
+            from .debye_waller import compute_U_tensors_phonon
+            self.dw_U = compute_U_tensors_phonon(
+                self.xtal, self.Phi, self.masses, self.kT_THz,
+                n_mesh=config.DEBYE_WALLER_QMESH)
+        elif config.DEBYE_WALLER_MODE == 'cif':
+            if self.material == 'AuTe2':
+                from .debye_waller import compute_U_tensors_cif
+                self.dw_U = compute_U_tensors_cif(self.xtal)
+            # else: the literature ADPs in compute_U_tensors_cif are AuTe2
+            # (Reithmayer et al.) specific and don't apply to other
+            # materials (e.g. Silicon) -- leave dw_U = None (no DW).
+        elif config.DEBYE_WALLER_MODE != 'none':
+            raise ValueError(
+                f"Unknown DEBYE_WALLER_MODE: {config.DEBYE_WALLER_MODE!r}")
 
     def analyze(self, Q_input, coords='primitive', freq_unit='meV', print_results=True,
                 print_detailed=False):
@@ -306,7 +324,9 @@ class SingleQAnalyzer:
         # Calculate form factors (one per element, applied per atom)
         Q_sinThOverLambda = Q_mag / (4 * np.pi)
 
-        f_by_element = {s: CalcAtomicfQ(Q_mag, s, scale=4*np.pi, use_xraylib=False)
+        # f(Q,E) = f0(Q) + f'(E) + i*f''(E) (xraylib, if available),
+        # otherwise the real f0(Q) from the built-in Cromer-Mann coefficients.
+        f_by_element = {s: calc_form_factor(Q_mag, s, config.ENERGY_KEV, scale=4*np.pi)
                         for s in set(self.symbols)}
 
         result['Q_sinThOverLambda'] = Q_sinThOverLambda
@@ -317,9 +337,22 @@ class SingleQAnalyzer:
         # reflection is kinematically unreachable.
         result['q_reachable'] = Q_sinThOverLambda * config.WAVELENGTH <= 1.0
 
+        # Effective per-atom form factors, including the Debye-Waller factor
+        # T_k(Q) = exp(-1/2 Q.U_k.Q) if config.DEBYE_WALLER_MODE != 'none'.
+        if self.dw_U is not None:
+            from .debye_waller import debye_waller_factor
+            dw_factors = np.array([debye_waller_factor(Q_cart, self.dw_U[k])
+                                    for k in range(self.xtal.nat)])
+        else:
+            dw_factors = np.ones(self.xtal.nat)
+        f_eff = np.array([f_by_element[self.symbols[k]] * dw_factors[k]
+                           for k in range(self.xtal.nat)])
+        result['debye_waller_factors'] = dw_factors
+        result['form_factors_eff'] = f_eff
+
         # Prepare for IXS calculation
-        fQ_matrix = np.array([[f_by_element[s] for s in self.symbols]])
-        
+        fQ_matrix = f_eff.reshape(1, -1)
+
         # Calculate IXS
         Is, Ias, n, F, xs_info = calc_ixs(
             w_THz.reshape(1, -1), ev, Q_prim.reshape(1, 3),  # Use FULL Q_prim for IXS
@@ -537,17 +570,23 @@ class SingleQAnalyzer:
                            for s, f in sorted(result["form_factors"].items()))
         print(f'\nT={kT_K:.0f}K  '
               f'sin(θ)/λ={result["Q_sinThOverLambda"]:.4f} A^-1  {ff_str}')
-        
+
+        if self.dw_U is not None:
+            dwf_str = '  '.join(f'{lbl}={d:.3f}' for lbl, d in
+                                 zip(self.atom_labels, result['debye_waller_factors']))
+            print(f'DWF(T={kT_K:.0f}K): {dwf_str}')
+
         # Calculate structure factor for elastic scattering
-        # F(Q) = sum_atoms f_atom(Q) * exp(2pii Q_prim * r_frac)
+        # F(Q) = sum_atoms f_eff_atom(Q) * exp(2pii Q_prim * r_frac)
         F = 0.0 + 0.0j
         Q_prim_vec = Q_prim
-        
+        f_eff = result['form_factors_eff']
+
         for iat in range(self.xtal.nat):
             r_frac = self.xtal.xs[iat]  # Fractional coordinates
             # Sign convention matches calc_ixs (exp(-2j*pi*Q.r))
             phase = -2 * np.pi * np.dot(Q_prim_vec, r_frac)
-            F += result["form_factors"][self.symbols[iat]] * np.exp(1j * phase)
+            F += f_eff[iat] * np.exp(1j * phase)
         
         F_squared = np.abs(F)**2
         
@@ -731,6 +770,12 @@ def interactive_mode(material='AuTe2'):
                                enable_satellites=mat['satellites'],
                                material=mat['name'],
                                sixc=sixc)
+
+    if analyzer.dw_U is not None:
+        u_iso_str = '  '.join(
+            f'{lbl}={np.trace(U)/3:.4f}'
+            for lbl, U in zip(analyzer.atom_labels, analyzer.dw_U))
+        print(f"Debye-Waller (phonon, U_iso, A^2): {u_iso_str}\n")
 
     # Default coordinate system
     coord_system = 'conventional'

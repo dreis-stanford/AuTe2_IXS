@@ -51,21 +51,21 @@ class FormFactorCalculator:
     def __init__(self, use_xraylib=True):
         """
         Initialize form factor calculator
-        
+
         Parameters:
         -----------
         use_xraylib : bool
             Use xraylib if available (default True)
         """
         self.use_xraylib = use_xraylib and HAS_XRAYLIB
-        
-        if self.use_xraylib:
-            print("Using xraylib for form factors")
-        else:
-            global _FORM_FACTOR_PRINTED
-            if not _FORM_FACTOR_PRINTED:
+
+        global _FORM_FACTOR_PRINTED
+        if not _FORM_FACTOR_PRINTED:
+            if self.use_xraylib:
+                print("Using xraylib for form factors")
+            else:
                 print("Using built-in Cromer-Mann coefficients")
-                _FORM_FACTOR_PRINTED = True
+            _FORM_FACTOR_PRINTED = True
     
     def calc_f(self, Q, symbol, scale=1.0):
         """
@@ -187,6 +187,66 @@ class FormFactorCalculator:
         }
         
         print(f"Added Cromer-Mann coefficients for {symbol}")
+
+
+def calc_form_factor(Q, symbol, energy_keV, scale=1.0, use_xraylib=True):
+    """
+    Full atomic form factor f(Q, E) = f0(Q) + f'(E) + i*Fii(E), where Fii is
+    xraylib's anomalous-scattering imaginary part (Fi/Fii).
+
+    A note on the sign of the imaginary part, since this is easy to get
+    backwards: xraylib's Fii(Z,E) is the *negative* of the physically
+    positive (absorptive) f''(E) -- i.e. -Fii(Z,E) is the quantity that
+    matches the optical theorem applied to xraylib's own photoelectric
+    cross section CS_Photo (verified in tests/test_form_factors.py). Using
+    Fii directly (as done here, NOT -Fii) is nonetheless correct for this
+    codebase, because code/ixs.py's structure factor uses the phase
+    convention exp(-2*pi*i*Q.r) (the opposite of the crystallographic
+    standard exp(+2*pi*i*Q.r)). Writing F_std for the structure factor built
+    with the standard convention (f''>0, exp(+2*pi*i*Q.r)) and F_ours for
+    ours (Fii<0, exp(-2*pi*i*Q.r)):
+
+        F_ours = sum_j (f0_j+f'_j - i*f''_j) * exp(-i*theta_j)
+               = sum_j conj(f0_j+f'_j + i*f''_j) * conj(exp(i*theta_j))
+               = conj(F_std)
+
+    so |F_ours|^2 == |F_std|^2 termwise, for any Q and any number of atoms.
+    The two sign flips (xraylib's Fii vs. f'', and our phase convention vs.
+    the crystallographic standard) cancel exactly, giving the physically
+    correct (absorptive, not "gain") |F(Q)|^2 used for IXS_stokes,
+    IXS_antistokes and the elastic |F|^2. Do not "fix" this by negating Fii
+    without also flipping the phase convention in code/ixs.py.
+
+    Parameters:
+    -----------
+    Q : float or ndarray
+        Scattering vector magnitude (see `scale`)
+    symbol : str
+        Element symbol
+    energy_keV : float
+        Photon energy in keV, for the energy-dependent dispersion
+        corrections f'(E) and Fii(E)
+    scale : float
+        Scale factor for Q (see FormFactorCalculator.calc_f)
+    use_xraylib : bool
+        Use xraylib if available (default True)
+
+    Returns:
+    --------
+    f : complex or float
+        f0(Q) + f'(E) + i*Fii(E) if xraylib is available, otherwise the
+        real f0(Q) from the built-in Cromer-Mann coefficients (f'=f''=0).
+    """
+    calculator = FormFactorCalculator(use_xraylib=use_xraylib)
+    f0 = calculator.calc_f(Q, symbol, scale=scale)
+
+    if calculator.use_xraylib:
+        Z = xraylib.SymbolToAtomicNumber(symbol)
+        f1 = xraylib.Fi(Z, energy_keV)
+        f2 = xraylib.Fii(Z, energy_keV)
+        return f0 + f1 + 1j * f2
+
+    return f0
 
 
 # Convenience function matching MATLAB interface

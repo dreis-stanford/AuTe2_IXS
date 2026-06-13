@@ -153,8 +153,16 @@ TEMPERATURE = 300.0
 # Energy resolution (meV) - typical for BL43LXU
 ENERGY_RESOLUTION = 1.5
 
-# Include Debye-Waller factor
-USE_DEBYE_WALLER = False # Not yet implemented - TODO
+# Debye-Waller factor mode:
+#  'none'   - no DW correction (previous behaviour)
+#  'phonon' - anisotropic U_k from a BZ sum over these force constants at
+#             config.TEMPERATURE (self-consistent, temperature-dependent)
+#  'cif'    - fixed literature U_ij (Reithmayer et al., 298K)
+DEBYE_WALLER_MODE = 'cif'
+
+# Monkhorst-Pack mesh (N x N x N) for the 'phonon' BZ sum, same
+# generate_bz_grid() used for the DOS in plot_dispersion.py.
+DEBYE_WALLER_QMESH = 15
 
 # ============================================================================
 # RECIPROCAL SPACE EXPLORATION
@@ -270,6 +278,10 @@ def print_config():
 
     print("\n[Thermal / IXS]")
     print(f"  Temperature: {TEMPERATURE} K")
-    print(f"  Debye-Waller: {USE_DEBYE_WALLER} (not yet implemented)")
+    if DEBYE_WALLER_MODE == 'phonon':
+        print(f"  Debye-Waller: {DEBYE_WALLER_MODE} "
+              f"(q-mesh {DEBYE_WALLER_QMESH}x{DEBYE_WALLER_QMESH}x{DEBYE_WALLER_QMESH})")
+    else:
+        print(f"  Debye-Waller: {DEBYE_WALLER_MODE}")
     print("="*70 + "\n")
 

@@ -68,7 +68,9 @@ def calc_ixs(w, ev, Q_rlu, b_l, xs, fQ, masses, kT,
     
     # 3. Geometric Phase Factors [nQ x ns]
     # Phase: exp(-i * 2π * Q_rlu · r)
-    # Note: Using -2πi convention for scattering
+    # Note: Using -2πi convention for scattering. This sign, combined with
+    # xraylib's sign-flipped Fii(Z,E), gives the physically correct
+    # (absorptive) |F(Q)|^2 -- see calc_form_factor() in form_factors.py.
     phases = np.exp(-2j * np.pi * (Q_rlu @ xs.T))  # [nQ x ns]
     
     # 4. Convert Q to Cartesian coordinates
