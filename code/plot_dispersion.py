@@ -162,23 +162,12 @@ def plot_aute2_dispersion(fc_file='data/AuTe_2_m.fc', n_points=201, show=True, b
 if __name__ == "__main__":
     import sys
     import os
-    
+
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    
-    # Plot dispersion (non-blocking by default)
-    fig, axes, q_path, w_cm = plot_aute2_dispersion(block=False)
-    
-    print("\n" + "=" * 70)
-    print("Dispersion calculation complete!")
-    print("=" * 70)
-    print("\nPlot window is open (non-blocking).")
-    print("Close the plot window or press Ctrl+C to exit.")
-    
-    # Keep script running so plot stays visible
-    try:
-        plt.pause(0.1)  # Small pause to ensure plot displays
-        input("\nPress Enter to exit...")
-    except KeyboardInterrupt:
-        print("\n\nExiting...")
-    
-    plt.close('all')
+
+    fc_file = sys.argv[1] if len(sys.argv) > 1 else 'data/AuTe_2_m.fc'
+
+    # Show the window and block *this* process until it is closed. The root
+    # launcher (plot_dispersion.py) runs this in a detached process, so the
+    # window stays open and interactive while the launching terminal is free.
+    plot_aute2_dispersion(fc_file=fc_file, show=True, block=True)
