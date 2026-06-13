@@ -193,7 +193,7 @@ class ModulatedStructure:
         return nearby
     
     def bragg_accessible_satellites(self,
-                                   wavelength: float = 0.570107,
+                                   wavelength: float = config.WAVELENGTH,
                                    max_2theta: float = 150.0) -> List[Dict]:
         """
         Find Bragg-accessible satellite reflections
