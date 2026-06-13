@@ -2,66 +2,95 @@
 
 ## State
 34/34 tests pass (`PYTHONPATH=. venv/bin/python3 -m pytest tests/ -q`).
-Commits this session: `b151502` (Debye-Waller modes + full f(Q,E) via
-xraylib), `3fd54a6` (Si-order/previous.bl.conf sync fix). Both pushed to
-`origin/main`.
+Commits today: `b151502` (Debye-Waller modes + full f(Q,E) via xraylib),
+`3fd54a6` (Si-order/previous.bl.conf sync fix), `cfb2d76` (array command
+~25x speedup), `b5a9f9a` (wider-region analyzer-array grid background),
+`b6737f0` (analyzer-array plot range/IXS-scale/axis declutter), plus
+uncommitted changes to `code/array_viz.py` (linear-radius marker size) and
+`code/geometry_viz.py` (top-down default view). All but the last two are
+pushed to `origin/main`.
 
 ## Completed this session
 
-### Debye-Waller factor (both modes)
+### Debye-Waller factor (both modes) and full f(Q,E) via xraylib
 - `code/debye_waller.py` (new): `compute_U_tensors_phonon(...)` (anisotropic
   U_k from a Monkhorst-Pack BZ sum over the force constants at
   `config.TEMPERATURE`) and `compute_U_tensors_cif(xtal)` (fixed 298K ADPs
   for AuTe2 from Reithmayer et al., Acta Cryst. B49, 6 1993).
-- `config.DEBYE_WALLER_MODE` ('none' | 'phonon' | 'cif') replaces the old
+  `config.DEBYE_WALLER_MODE` ('none' | 'phonon' | 'cif') replaces the old
   unused `USE_DEBYE_WALLER` flag; default is now **'cif'**.
-- `single_q_analysis.py` wires `self.dw_U` into the IXS/elastic structure
-  factor; the `'cif'` mode is gated to `material == 'AuTe2'` (the literature
-  ADPs don't apply to Silicon).
-- Tests: `tests/test_debye_waller.py` (new).
-
-### Full f(Q,E) via xraylib
 - `code/form_factors.calc_form_factor(Q, symbol, energy_keV, ...)` returns
   f0(Q) + f'(E) + i*f''(E) using xraylib's `FF_Rayl`/`Fi`/`Fii` (falls back
-  to real f0(Q) from Cromer-Mann if xraylib is unavailable). Wired into
-  `single_q_analysis.py` (replaces the old `CalcAtomicfQ(... use_xraylib=False)`
-  call).
-- **Sign-convention check (important, now documented in
-  `form_factors.calc_form_factor`'s docstring)**: xraylib's `Fii(Z,E)` is the
-  *negative* of the physically-positive (absorptive) f''(E) — verified via
-  the optical theorem against `xraylib.CS_Photo`. Using `Fii` directly (not
-  `-Fii`) is correct here because it exactly cancels against this codebase's
-  `exp(-2*pi*i*Q.r)` phase convention in `code/ixs.py` (`F_ours = conj(F_std)`,
-  so `|F_ours|^2 == |F_std|^2`). Do not "fix" the sign without also flipping
-  the phase convention in `ixs.py`. Regression test:
+  to real f0(Q) from Cromer-Mann if xraylib is unavailable). The sign
+  convention of xraylib's `Fii` vs. this codebase's `exp(-2*pi*i*Q.r)` phase
+  convention is documented in `calc_form_factor`'s docstring and verified in
   `tests/test_form_factors.py`.
+- Fixed a stale "Si(11 11 11)" printout (`_load_sixcircle` now calls
+  `setorder(config.SI_ORDER)` so `previous.bl.conf` stays in sync).
 
-### Stale "Si(11 11 11)" printout fix
-- `previous.bl.conf` (gitignored runtime cache) had `silicon_order=11` saved
-  from before `config.SI_ORDER` was changed to 12, so `init_rqd()`'s
-  auto-load printed "Set to Si(11 11 11)..." even though the actual
-  calculation wavelength was already correct (config.WAVELENGTH, Si(12,12,12)).
-  `_load_sixcircle` now calls `sixcircle_rqd.setorder(config.SI_ORDER)`
-  instead of assigning `sixcircle.LAMBDA` directly, which keeps
-  `silicon_order` and `previous.bl.conf` in sync — `pa()` and startup banners
-  now correctly report Si(12,12,12) / 23.724 keV.
+### Analyzer-array visualization (`array` command)
+- **Performance** (`cfb2d76`): `analyzer_array_offsets()` now returns each
+  analyzer's `tth`/`gam` directly (from the same `ca6`-equivalent geometry
+  pass that computes `dH,dK,dL`), and `analyze_array()` passes these to
+  `analyze(..., tth_gam=...)` instead of re-solving angles per analyzer.
+  ~25x speedup (7.6s -> 0.31s for 28 analyzers), numerically identical
+  (~1e-8) to before.
+- **Wider-region background** (`b5a9f9a`): new
+  `SixCircleInterface.compute_angle_grid(hkl, dtth, dgam)` and
+  `SingleQAnalyzer.analyze_grid()`/`analyze_array_grid()` compute
+  frequencies/IXS over a dense (dtth, dgam) grid, fully vectorized (batch
+  `calc_Dq`/`calc_freq_eig`/`calc_form_factor`/`calc_ixs`, with a per-grid-point
+  loop only over the cheap `sixc.mv(tth=, gam=)` forward-kinematics calls).
+  `array_viz.plot_analyzer_array(..., grid=...)` draws frequency contours over
+  this grid with the 28 real analyzers overlaid as circles.
+- **Range/scale/declutter** (`b6737f0`): explicit `dtth_range=(-3,3)`,
+  `dgam_range=(-3,1)` degrees (was an `extent`-derived range); IXS circle size
+  now linear, saturating at the 10th/90th percentiles of the 28-analyzer
+  IXS_stokes values (previously log-scaled, which hid mode-to-mode contrast);
+  per-subplot axes are unlabeled, with the Δtth/Δγ plot range stated once in
+  the figure title.
+- **Marker-size shape** (this session, uncommitted): `sizes_for()` is now
+  linear in *radius* (not area), min marker area ~3 pt^2 (was 15), max
+  ~215 pt^2 -- gives much better visual contrast between weak and strong
+  modes. Verified by re-rendering `/tmp/array_viz_sizes.png`.
+- **Verification for a Γ-point Q** (Q=(1,1,5), this session): frequencies and
+  IXS_stokes for the displayed (non-"---") modes match exactly across
+  `analyze()`/`analyze_array()`/`analyze_array_grid()`. The acoustic modes
+  1-3 (near Γ, shown as "---" in the single-Q table) have large but finite
+  IXS values (the real 1/ω near-elastic divergence, floored by `min_w=0.1
+  THz` in `calc_ixs`); individual mode-1/2 values differ between
+  `analyze_array` and `analyze_array_grid` due to the degenerate-eigenvector
+  basis ambiguity at exact Γ, but their *sum* matches. These large values
+  saturate to the max marker size in the percentile-based scale -- working
+  as intended, not a bug.
+
+### Geometry view (`viz` command)
+- Real-UB crystal frame (`a1a5e14`, earlier today): `SixCircleInterface.get_UB()`
+  + `ub=`/`--ub` arg to `plot_scattering_geometry`/the CLI; surface normal =
+  c* = `UB @ hkl`, real axes a,b,c = columns of `inv(UB).T`, rotated to lab
+  via `rotate_Q_to_lab_frame`. Idealized-axes fallback kept for `ub=None`.
+- **Top-down default view** (this session, uncommitted):
+  `ax.view_init(elev=90, azim=-90, roll=90)` gives a top-down view of the
+  (horizontal) scattering plane: k_in (mu=0) is horizontal, arriving from
+  the left; k_out's sin(tth) component points up on screen for tth>0 and
+  cos(tth) is horizontal -- i.e. how the experiment looks from above.
+  Verified numerically (`_kin_hat`/`_kout_hat` projections) and visually
+  (`/tmp/viz_top_clean.png`). The lab-frame reference triad moved to the
+  empty upper-right corner (screen_x=-y_lab, screen_y=+x_lab); z (lab
+  vertical) now points at the viewer, so its axis ticks are hidden.
 
 ## Next steps (not yet started)
-
-Priority order set this session (see TODO.md "Next Session Priorities"):
 
 1. **Measurement planning** (TODO #4) and **wiring up `code/q_optimizer.py`**
    — currently a standalone, unused module (ranks candidate Q-points by
    expected phonon-mode intensity). Use it to help build the AuTe2
    measurement plan (CDW b-axis modes, satellite positions, diffractometer
    accessibility via `ANGLE_LIMITS`, estimated measurement times).
-2. **Geometry-viz UB refactor** (`code/geometry_viz.py`) — make the 3D
-   scattering-geometry view derive the crystal frame from the real UB matrix
-   (`SixCircleInterface.get_UB()`) instead of idealized axes. See TODO #6a
-   and the `geometry-viz-ub-refactor-wip` memory note for the worked-out
-   derivation (surface normal = c* = UB @ (0,0,1), real axes = columns of
-   inv(UB).T, etc.) — this was deferred until after the DWF/form-factor work,
-   which is now done.
+2. **Verify lab-frame axis conventions** (TODO #6a, second bullet): the
+   top-down view's k_in/k_out/tth geometry is self-consistent with
+   `_kin_hat`/`_kout_hat`, but the th/chi/phi rotation sense vs. the real
+   BL43LXU instrument is still unverified against the sixcircle
+   documentation.
 
 ## Environment notes
 - venv at `venv/`; each Bash call is a fresh shell, so always set

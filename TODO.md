@@ -1,17 +1,19 @@
 # AuTe2 IXS Analysis - TODO List
 
-## Next Session Priorities (set 2026-06-13)
+## Next Session Priorities (set 2026-06-13, end of day)
 
-With the Debye-Waller factor and full dispersion-corrected form factors
-done, the suggested order is:
+With the analyzer-array visualization (performance, wider-region grid,
+linear-saturating IXS scale, linear-radius marker sizes) and the
+geometry-viz UB refactor + top-down default view all done, the suggested
+order is:
 
 1. **Measurement planning** (#4) and **wiring up `code/q_optimizer.py`**
    (currently a standalone, unwired module - see README "Project
    Structure") - use it to help choose/rank Q-points for the measurement
    plan.
-2. **Geometry-viz UB refactor** (`code/geometry_viz.py`) - make the 3D
-   scattering-geometry view use the real UB matrix instead of idealized
-   axes (see #6a below).
+2. Verify the lab-frame axis conventions
+   (`verify_scattering.rotate_Q_to_lab_frame`, sense of th/chi/phi
+   rotations) against the sixcircle documentation (see #6a, second bullet).
 
 ## High Priority
 
@@ -62,13 +64,28 @@ done, the suggested order is:
 - [ ] Cross-check IXS intensities
 
 ### 6a. Geometry Visualization (`viz` / `code/geometry_viz.py`)
-- [ ] Default 3D view: orient the camera so the lab z-axis points mostly
-      "up" on screen (currently an arbitrary default elevation/azimuth).
+- [x] Real-UB crystal frame (2026-06-12, `a1a5e14`): `SixCircleInterface.get_UB()`
+      plus a `ub=`/`--ub` arg to `plot_scattering_geometry`/the `geometry_viz`
+      CLI; surface normal = c* = `UB @ hkl`, real axes a,b,c = columns of
+      `inv(UB).T`, both rotated to lab via `rotate_Q_to_lab_frame`. Idealized
+      axes remain as a fallback when `ub=None`.
+- [x] Default 3D view: top-down view of the (horizontal) scattering plane
+      (2026-06-13: `ax.view_init(elev=90, azim=-90, roll=90)`). Incident
+      beam (k_in, mu=0) is horizontal, arriving from the left; k_out's
+      sin(tth) component points up on screen for tth>0 and its cos(tth)
+      component is horizontal -- matching how the experiment looks from
+      above. The lab-frame reference triad moved to the empty upper-right
+      corner; z (lab vertical) now points at the viewer, so its axis ticks
+      are hidden (collapse to a point) and it's labeled only in the triad.
 - [ ] Double-check the lab-frame axis conventions (origin/sense of the
       th and tth rotations) against the sixcircle documentation
       (`~/Documents/MyPython/Others/sixcircle_1p85/sixcircle_documentation/`)
       to confirm `verify_scattering.rotate_Q_to_lab_frame` matches the real
-      instrument, not just an internally-consistent convention.
+      instrument, not just an internally-consistent convention. (Partial
+      check 2026-06-13: the top-down view's k_in/k_out/tth geometry is
+      self-consistent with `_kin_hat`/`_kout_hat`'s lab-frame definitions --
+      no inconsistency found there -- but th/chi/phi rotation sense vs. the
+      real instrument is still unverified.)
 
 ## Low Priority
 
@@ -102,6 +119,18 @@ done, the suggested order is:
       xraylib when available, wired into `single_q_analysis.py`. f''
       sign-convention vs. this codebase's exp(-2*pi*i*Q.r) phase convention
       verified against the optical theorem; see `tests/test_form_factors.py`.)
+- [x] Analyzer-array visualization improvements (2026-06-13):
+      - Performance: avoid redundant angle solves in the `array` command
+        (~25x speedup, `cfb2d76`).
+      - Wider-region contour background via `analyze_array_grid`/
+        `SixCircleInterface.compute_angle_grid`, vectorized (`b5a9f9a`).
+      - Explicit plot range (`dtth_range=(-3,3)`, `dgam_range=(-3,1)`
+        degrees), linear IXS scale saturating at the 10th/90th percentiles,
+        decluttered per-subplot axes with a single plot-range annotation in
+        the figure title (`b6737f0`).
+      - IXS marker size now linear in radius (not area), min marker area
+        ~3 pt^2 / max ~215 pt^2, for better small-vs-large contrast.
+- [x] Geometry-viz UB refactor and top-down default view (see #6a).
 
 ## Notes
 

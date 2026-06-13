@@ -64,6 +64,10 @@ Reference: Schutte et al., Acta Cryst. B44, 486 (1988)
 - `H K L [m]` - Analyze Q-point (optional m for satellites)
 - `angles` - Calculate diffractometer angles for the last Q (calculation only;
   also prints a ready-to-paste SPEC `mv` command)
+- `array` - Plot phonon frequency contours and IXS Stokes intensities across
+  the BL43LXU analyzer array for the last Q, over a wider Δtth/Δγ background
+- `viz` - Open a rotatable 3D view (top-down on the scattering plane) of the
+  diffractometer geometry for the last Q
 - `freeze` - Show/set the frozen-angle mode and held values, e.g.
   `freeze 456` (freeze mu, gam, omega) or `freeze mu=-0.17`
 - `limits` - Show/set angle limits, e.g. `limits tth 0 60` (selects the
@@ -78,6 +82,23 @@ mode/values and angle limits start from `code/config.py` (`FROZEN_ANGLES`,
 `freeze`/`limits` commands above.
 
 ## Recent Updates
+
+### Analyzer-array plot and 3D geometry view (2026-06-13)
+- `array` command: the per-mode frequency/IXS plots now render against a
+  wider Δtth ∈ [-3, 3]°, Δγ ∈ [-3, 1]° background grid (vectorized via
+  `SixCircleInterface.compute_angle_grid` / `analyze_array_grid`), with the
+  28 real analyzer positions overlaid as circles. The IXS Stokes intensity
+  sets circle size on a linear scale that saturates at the 10th/90th
+  percentiles (radius, not area, scales linearly -- min ~3 pt^2, max
+  ~215 pt^2 -- for better contrast between weak and strong modes). Per-subplot
+  axes are unlabeled; the Δtth/Δγ plot range is stated once in the title.
+  Also ~25x faster (avoids redundant angle solves per analyzer).
+- `viz` command: the 3D scattering-geometry view now derives the crystal
+  frame (surface normal, a/b/c axes) from the real UB matrix
+  (`SixCircleInterface.get_UB()`), and defaults to a top-down view of the
+  (horizontal) scattering plane -- incident beam horizontal from the left,
+  and the scattered beam's sin(tth)/cos(tth) components vertical/horizontal
+  on screen (tth>0 points up).
 
 ### Debye-Waller factor and dispersion-corrected form factors (2026-06-13)
 - `config.DEBYE_WALLER_MODE` ('none' | 'phonon' | 'cif', default **'cif'**)

@@ -47,3 +47,6 @@
 - `plot_dispersion.py` - General dispersion plotting
 - `plot_dispersion_aute2_working.py` - AuTe2 specific
 - `plot_dispersion_si.py` - Silicon specific
+- `array_viz.py` - Analyzer-array frequency/IXS contour plots (`array`
+  command)
+- `geometry_viz.py` - 3D scattering-geometry view (`viz` command)
