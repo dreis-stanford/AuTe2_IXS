@@ -61,12 +61,14 @@ FROZEN_VALUES = {
 # Angle limits (degrees) as (lower, upper). ca()/ca6() reject solutions outside
 # these, so narrowing them selects among multiple solutions (e.g. force tth>0).
 ANGLE_LIMITS = {
-    # tth defaults to >= 0 so the conventional top-face (tth>0) branch is
-    # selected; sixcircle otherwise returns the negative-tth mirror solution
-    # (bottom-face geometry) for reflections like (0,0,L>0). Widen with e.g.
-    # `limits tth -180 180` to inspect the bottom-face branch.
-    'tth':   (0.0, 180.0),
-    'th':    (-180.0, 180.0),
+    # Defaults follow sixcircle_rqd's setlm_bl43_eulerian_cradle() preset
+    # (Eulerian cradle, no cryostat). tth also stays >= 0 so the conventional
+    # top-face (tth>0) branch is selected; sixcircle otherwise returns the
+    # negative-tth mirror solution (bottom-face geometry) for reflections
+    # like (0,0,L>0). Widen with e.g. `limits tth -180 180` to inspect the
+    # bottom-face branch.
+    'tth':   (0.6, 52.0),
+    'th':    (-20.0, 26.0),
     'chi':   (-180.0, 180.0),
     'phi':   (-180.0, 180.0),
     'mu':    (-180.0, 180.0),

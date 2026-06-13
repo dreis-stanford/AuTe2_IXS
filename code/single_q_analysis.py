@@ -23,10 +23,10 @@ from .modulated_structure import ModulatedStructure
 # Mode polarization classification (unified scheme)
 # ============================================================================
 # Strict L/T thresholds: meaningful for selection rules. On symmetry lines the
-# (fixed) L-char numerics reach exact 0/1 to ~1e-6, so 0.95/0.05 is
+# (fixed) L-char numerics reach exact 0/1 to ~1e-6, so 0.98/0.02 is
 # comfortably above numerical noise; tighten here if desired.
-STRICT_L = 0.95   # L-char above this  -> 'L'    (longitudinal, selection-rule grade)
-STRICT_T = 0.05   # L-char below this  -> 'T'    (transverse, selection-rule grade)
+STRICT_L = 0.98   # L-char above this  -> 'L'    (longitudinal, selection-rule grade)
+STRICT_T = 0.02   # L-char below this  -> 'T'    (transverse, selection-rule grade)
 PRIMARY_L = 0.7   # L-char above this  -> 'M(L)' (mixed, primarily longitudinal)
 PRIMARY_T = 0.3   # L-char below this  -> 'M(T)' (mixed, primarily transverse)
 #                   anything else      -> 'M'    (mixed)
@@ -439,37 +439,35 @@ class SingleQAnalyzer:
         return array_results
     
     def _print_array_results(self, array_results, freq_unit='meV'):
-        """Print simplified analyzer array table"""
+        """Print compact analyzer array table: dQ offsets + freq/Pol pairs"""
 
         print('\n' + '='* 80)
         print(f'Analyzer Array Results - {len(array_results)} analyzers')
-        print('Note: Analyzer (H,K,L) computed from the real UB matrix and the')
-        print('      BL43LXU 7x4 analyzer-array geometry, for the arm centered on this Q.')
+        print('Note: Analyzer (dH,dK,dL) offsets from Q_center computed from the real UB')
+        print('      matrix and the BL43LXU 7x4 analyzer-array geometry.')
         print('='* 80)
-        
+
         # Header
         freq_label = {'meV': 'meV', 'cm-1': 'cm^-1', 'THz': 'THz'}[freq_unit]
-        
-        print(f'{"Ana":>4s}  {"H":>7s} {"K":>7s} {"L":>7s}  {"   Frequencies (" + freq_label + ")":60s}  {"IXS (barn/uc*sr)"}')
+
+        print(f'{"#":>2s} {"dH":>5s} {"dK":>5s} {"dL":>5s}  '
+              f'Freq ({freq_label}), modes 1-9 (low to high)')
         print('-'* 80)
-        
-        freq_key = {'meV': 'frequencies_meV', 
+
+        freq_key = {'meV': 'frequencies_meV',
                    'cm-1': 'frequencies_cm',
                    'THz': 'frequencies_THz'}[freq_unit]
-        
+
         for result in array_results:
-            Q = result['Q_conv']
+            num = result['analyzer'][1:]
+            dQ = result['Q_offset']
             freqs = result[freq_key]
-            ixs_stokes = result['IXS_stokes']
-            
-            # Show first 6 modes
-            freq_str = '  '.join([f'{f:5.1f}' for f in freqs[:6]])
-            ixs_str = '  '.join([f'{xs:5.2f}' if xs > 0.01 else ' ~0  ' 
-                                for xs in ixs_stokes[:6]])
-            
-            print(f'{result["analyzer"]:>4s}  {Q[0]:7.3f} {Q[1]:7.3f} {Q[2]:7.3f}  '
-                  f'{freq_str}  {ixs_str}')
-        
+
+            freq_str = ' '.join(f'{f:5.1f}' for f in freqs)
+
+            print(f'{num:>2s} {dQ[0]:5.2f} {dQ[1]:5.2f} {dQ[2]:5.2f}  '
+                  f'{freq_str}')
+
         print('='*80 + '\n')
 
     @staticmethod
@@ -794,7 +792,25 @@ def interactive_mode(material='AuTe2'):
                 continue
             try:
                 Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
-                analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
+                array_results = analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
+                analyzer_qs = {str(int(r['analyzer'][1:])): r['Q_conv'] for r in array_results}
+                print("Enter analyzer # for its IXS table (blank: redisplay table, 'q': back)\n")
+                while True:
+                    sel = input("Analyzer #: ").strip().lower()
+                    if sel in ('q', 'quit', 'b', 'back'):
+                        break
+                    if not sel:
+                        analyzer._print_array_results(array_results, freq_unit)
+                        continue
+                    try:
+                        num = str(int(sel))
+                    except ValueError:
+                        num = sel
+                    if num not in analyzer_qs:
+                        print(f"\n⚠ Unknown analyzer '{sel}'. "
+                              f"Available: {', '.join(sorted(analyzer_qs, key=int))}\n")
+                        continue
+                    analyzer.analyze(analyzer_qs[num], coords='conventional', freq_unit=freq_unit)
             except Exception as e:
                 print(f"\n✗ {e}\n")
                 import traceback
@@ -816,15 +832,31 @@ def interactive_mode(material='AuTe2'):
                 print("Diffractometer Angles (calculation only — no motion)")
                 print("=" * 80)
                 print(f"Q (conv): [{Q_conv[0]:.4f}, {Q_conv[1]:.4f}, {Q_conv[2]:.4f}]")
-                print(sixc.describe_constraints())
+                print(sixc.describe_constraints(include_limits=False))
                 a = sixc.calculate_angles(hkl)
+                out_of_limits = False
                 if a is None:
-                    print("\n  ⚠ Inaccessible within current angle limits.")
-                    print("    Try 'limits' to widen them or 'freeze' to change mode.")
+                    a = sixc.calculate_angles(hkl, ignore_limits=True)
+                    out_of_limits = a is not None
+                if a is None:
+                    print("\n  ⚠ Inaccessible: no solution exists even with "
+                          "limits relaxed to ±180°.")
                 else:
+                    if out_of_limits:
+                        violations = [
+                            f"{name}={a[name]:.3f} (limit [{lo:g}, {hi:g}])"
+                            for name, (lo, hi) in config.ANGLE_LIMITS.items()
+                            if not (lo <= a[name] <= hi)]
+                        print("\n  ⚠ Outside current angle limits"
+                              + (": " + ", ".join(violations) if violations else "."))
+                        print("    Try 'limits' to widen them or 'freeze' to change mode.")
                     print("\n  " + "  ".join(
                         f"{k}={a[k]:8.3f}" for k in
-                        ('tth', 'th', 'chi', 'phi', 'mu', 'gam')))
+                        ('th', 'chi', 'phi', 'mu')))
+                    print("  " + "  ".join(
+                        f"{k}={a[k]:8.3f}" for k in ('tth', 'gam')))
+                    print("  " + "  ".join(
+                        f"{k}={a[k]:8.3f}" for k in ('alpha', 'beta', 'omega')))
                     print(f"\n  SPEC:  mv tth {a['tth']:.4f} th {a['th']:.4f} "
                           f"chi {a['chi']:.4f} phi {a['phi']:.4f} "
                           f"mu {a['mu']:.4f} gam {a['gam']:.4f}")

@@ -176,15 +176,17 @@ class SixCircleInterface:
         config.reset_angle_limits()
         self.apply_limits()
 
-    def describe_constraints(self) -> str:
-        """Return a human-readable summary of the current frozen mode + limits."""
+    def describe_constraints(self, include_limits: bool = True) -> str:
+        """Return a human-readable summary of the current frozen mode (+ limits)."""
         frozen = ", ".join(
             f"{self._ANGLE_CODES[d]}={config.FROZEN_VALUES.get(self._ANGLE_CODES[d], 0.0):.4g}"
             for d in config.FROZEN_ANGLES)
-        lines = [f"Frozen ({config.FROZEN_ANGLES}): {frozen}", "Limits (deg):"]
-        for name, (lo, hi) in config.ANGLE_LIMITS.items():
-            flag = "  (default)" if (lo, hi) == (-180.0, 180.0) else ""
-            lines.append(f"    {name:>5}: [{lo:8.3f}, {hi:8.3f}]{flag}")
+        lines = [f"Frozen ({config.FROZEN_ANGLES}): {frozen}"]
+        if include_limits:
+            lines.append("Limits (deg):")
+            for name, (lo, hi) in config.ANGLE_LIMITS.items():
+                flag = "  (default)" if (lo, hi) == (-180.0, 180.0) else ""
+                lines.append(f"    {name:>5}: [{lo:8.3f}, {hi:8.3f}]{flag}")
         return "\n".join(lines)
 
     def setup_experiment(self):
@@ -311,26 +313,49 @@ class SixCircleInterface:
             'gaps': {'v': agap_v, 'h': agap_h}
         }
     
-    def calculate_angles(self, hkl: Tuple[float, float, float]) -> Optional[Dict[str, float]]:
+    def calculate_angles(self, hkl: Tuple[float, float, float],
+                         ignore_limits: bool = False) -> Optional[Dict[str, float]]:
         """
         Calculate the six diffractometer angles for a reflection (no motion).
 
         Uses sixcircle's ca_s() solver under the current frozen mode and angle
-        limits. Returns a dict {tth, th, chi, phi, mu, gam} for the first valid
-        solution, or None if the reflection is inaccessible within the limits.
-        Raises RuntimeError if the sixcircle library is not loaded.
+        limits. Returns a dict {tth, th, chi, phi, mu, gam, omega, alpha, beta}
+        for the first valid solution, or None if the reflection is
+        inaccessible within the limits. Raises RuntimeError if the sixcircle
+        library is not loaded.
+
+        If ignore_limits is True, the configured angle limits are temporarily
+        widened to ±180° for this calculation (then restored), so the
+        returned solution may lie outside config.ANGLE_LIMITS.
         """
         if self.sixc is None:
             raise RuntimeError(
                 "Angle calculation requires the sixcircle library, which is "
                 "not loaded (check config.SIXCIRCLE_PATH).")
         h, k, l = (float(hkl[0]), float(hkl[1]), float(hkl[2]))
-        flag, pos = self.sixc.ca_s(h, k, l)
+        if ignore_limits:
+            saved = {}
+            for name, (lvar, uvar) in self._LIMIT_GLOBALS.items():
+                saved[name] = (getattr(self.sixc, lvar), getattr(self.sixc, uvar))
+                setattr(self.sixc, lvar, -180.0)
+                setattr(self.sixc, uvar, 180.0)
+            try:
+                flag, pos = self.sixc.ca_s(h, k, l)
+            finally:
+                for name, (lvar, uvar) in self._LIMIT_GLOBALS.items():
+                    lo, hi = saved[name]
+                    setattr(self.sixc, lvar, lo)
+                    setattr(self.sixc, uvar, hi)
+        else:
+            flag, pos = self.sixc.ca_s(h, k, l)
         if not flag or not pos:
             return None
         tth, th, chi, phi, mu, gam = pos[0][:6]
+        omega = pos[0][7]
+        alpha, beta = pos[0][9], pos[0][10]
         return {'tth': tth, 'th': th, 'chi': chi,
-                'phi': phi, 'mu': mu, 'gam': gam}
+                'phi': phi, 'mu': mu, 'gam': gam, 'omega': omega,
+                'alpha': alpha, 'beta': beta}
 
     def analyzer_array_offsets(self, hkl: Tuple[float, float, float]
                                 ) -> Optional[Dict[str, np.ndarray]]:

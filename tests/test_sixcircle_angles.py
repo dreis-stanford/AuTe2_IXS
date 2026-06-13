@@ -40,9 +40,9 @@ def sixc():
         s.apply_frozen()
 
 
-def test_calculate_angles_returns_six(sixc):
+def test_calculate_angles_returns_nine(sixc):
     a = sixc.calculate_angles((0, 0, 2))
-    assert set(a) == {'tth', 'th', 'chi', 'phi', 'mu', 'gam'}
+    assert set(a) == {'tth', 'th', 'chi', 'phi', 'mu', 'gam', 'omega', 'alpha', 'beta'}
     assert all(isinstance(v, float) for v in a.values())
 
 
