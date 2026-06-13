@@ -449,6 +449,64 @@ class SixCircleInterface:
 
         return offsets
 
+    def compute_angle_grid(self, hkl: Tuple[float, float, float],
+                            dtth, dgam) -> Optional[Dict[str, np.ndarray]]:
+        """
+        Forward-kinematics (H,K,L) for a grid of (dtth, dgam) offsets from
+        the (tth, gam) solution for hkl, at fixed (th, chi, phi, mu) -- i.e.
+        the same per-point computation as analyzer_array_offsets(), but for
+        an arbitrary caller-supplied 2D grid of angular offsets rather than
+        the 28 fixed BL43LXU analyzer positions. Used to plot phonon
+        frequency/IXS maps over a wider (dtth, dgam) region than the
+        analyzer array itself spans.
+
+        Parameters
+        ----------
+        hkl : (H, K, L), the center reflection
+        dtth, dgam : 1D array-like (degrees)
+            Angular offsets from the center (tth, gam), meshgridded
+            internally (np.meshgrid(dtth, dgam), default 'xy' indexing) so
+            the returned arrays have shape (len(dgam), len(dtth)).
+
+        Returns dict with 'dtth', 'dgam', 'tth', 'gam' (each
+        (len(dgam), len(dtth))) and 'Q_conv' ((len(dgam), len(dtth), 3)), or
+        None if hkl is inaccessible under the current frozen angles/limits.
+        Raises RuntimeError if sixcircle is not loaded.
+        """
+        if self.sixc is None:
+            raise RuntimeError(
+                "Angle-grid calculation requires the sixcircle library, "
+                "which is not loaded (check config.SIXCIRCLE_PATH).")
+        angles = self.calculate_angles(hkl)
+        if angles is None:
+            return None
+
+        sixc = self.sixc
+        ca_tth, ca_gam = angles['tth'], angles['gam']
+
+        DTTH, DGAM = np.meshgrid(np.asarray(dtth, float), np.asarray(dgam, float))
+        TTH = ca_tth + DTTH
+        GAM = ca_gam + DGAM
+        Q_conv = np.empty(TTH.shape + (3,))
+
+        o_FLAG_WH = sixc.FLAG_WH
+        sixc.FLAG_WH = False
+        try:
+            sixc.mv(tth=ca_tth, th=angles['th'], chi=angles['chi'],
+                    phi=angles['phi'], mu=angles['mu'], gam=ca_gam)
+
+            for idx in np.ndindex(TTH.shape):
+                sixc.mv(tth=float(TTH[idx]), gam=float(GAM[idx]))
+                Q_conv[idx] = (sixc.H, sixc.K, sixc.L)
+
+            # Restore center position
+            sixc.mv(tth=ca_tth, th=angles['th'], chi=angles['chi'],
+                    phi=angles['phi'], mu=angles['mu'], gam=ca_gam)
+        finally:
+            sixc.FLAG_WH = o_FLAG_WH
+
+        return {'dtth': DTTH, 'dgam': DGAM, 'tth': TTH, 'gam': GAM, 'Q_conv': Q_conv}
+
     def get_UB(self):
         """Return the 3x3 UB matrix (U @ B) currently loaded in sixcircle, or
         None if unavailable. Columns of UB are a*, b*, c* in the phi frame;

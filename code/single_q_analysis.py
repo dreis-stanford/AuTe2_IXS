@@ -494,9 +494,143 @@ class SingleQAnalyzer:
         
         if print_results:
             self._print_array_results(array_results, freq_unit)
-        
+
         return array_results
-    
+
+    def analyze_grid(self, Q_conv_grid, tth_grid, gam_grid, freq_unit='meV'):
+        """
+        Vectorized phonon frequencies + Stokes IXS intensity over a grid of
+        Q-points (e.g. a wider (dtth, dgam) region than the analyzer array
+        spans, from SixCircleInterface.compute_angle_grid()).
+
+        Unlike analyze(), this computes only frequencies and IXS_stokes (no
+        L/T character, atom participation, etc.) and processes all grid
+        points in a single batched calc_Dq/calc_freq_eig/calc_ixs call --
+        the vectorization analyze_array() lacked when looping analyze() over
+        many Q-points.
+
+        Parameters
+        ----------
+        Q_conv_grid : ndarray (..., 3)
+            Q-points in conventional coordinates, any leading shape.
+        tth_grid, gam_grid : ndarray (...)
+            Absolute (tth, gam) (degrees), same leading shape as
+            Q_conv_grid, for the beam-polarization factor.
+        freq_unit : str
+            'meV', 'THz', or 'cm-1'
+
+        Returns:
+        --------
+        dict with 'frequencies_<unit>' and 'IXS_stokes', each of shape
+        (..., nmodes)
+        """
+        Q_conv_grid = np.asarray(Q_conv_grid)
+        shape = Q_conv_grid.shape[:-1]
+        Q_conv = Q_conv_grid.reshape(-1, 3)
+        Q_prim = aute2_conv2prim_k(Q_conv)
+        nQ = Q_prim.shape[0]
+
+        Dq = calc_Dq(Q_prim, self.xtal.uvw, self.Phi, self.masses)
+        w_raw, ev = calc_freq_eig(Dq, sort_modes=False, rotate_ev=False)
+        w_THz = convert_frequencies(w_raw, 'THz')
+        freq_key, freq_label = {'meV': ('frequencies_meV', 'meV'),
+                                 'THz': ('frequencies_THz', 'THz'),
+                                 'cm-1': ('frequencies_cm', 'cm-1')}[freq_unit]
+        freq_out = convert_frequencies(w_raw, freq_label)
+        nmodes = freq_out.shape[1]
+
+        Q_cart = Q_prim @ self.xtal.b_l
+        Q_mag = np.linalg.norm(Q_cart, axis=1)
+
+        f_by_element = {s: calc_form_factor(Q_mag, s, config.ENERGY_KEV, scale=4 * np.pi)
+                        for s in set(self.symbols)}
+
+        if self.dw_U is not None:
+            dw_factors = np.stack([
+                np.exp(-0.5 * np.einsum('qi,ij,qj->q', Q_cart, self.dw_U[k], Q_cart))
+                for k in range(self.xtal.nat)
+            ], axis=1)  # (nQ, nat)
+        else:
+            dw_factors = np.ones((nQ, self.xtal.nat))
+
+        f_eff = np.stack([f_by_element[self.symbols[k]]
+                           for k in range(self.xtal.nat)], axis=1)  # (nQ, nat)
+        fQ_matrix = f_eff * dw_factors
+
+        Is, _, _, _, _ = calc_ixs(
+            w_THz, ev, Q_prim, self.xtal.b_l, self.xtal.xs, fQ_matrix,
+            self.masses, self.kT_THz, units='barn', per_steradian=True)
+
+        pol_factor = polarization_factor(np.asarray(tth_grid).reshape(-1),
+                                          np.asarray(gam_grid).reshape(-1))
+        IXS_stokes = Is * pol_factor[:, np.newaxis]
+
+        return {
+            freq_key: freq_out.reshape(shape + (nmodes,)),
+            'IXS_stokes': IXS_stokes.reshape(shape + (nmodes,)),
+        }
+
+    def analyze_array_grid(self, Q_center, coords='conventional', freq_unit='meV',
+                            extent=2.0, n_tth=21, n_gam=21):
+        """
+        Phonon frequency/IXS maps over a (dtth, dgam) region `extent` times
+        wider than the BL43LXU analyzer array spans, for the background of
+        the array-command contour plots (see array_viz.plot_analyzer_array).
+
+        Parameters
+        ----------
+        Q_center : array-like (3,)
+            Center Q position (same convention as analyze_array())
+        coords : str
+            'primitive' or 'conventional'
+        freq_unit : str
+            'meV', 'THz', or 'cm-1'
+        extent : float
+            Factor by which to widen the (dtth, dgam) range relative to the
+            actual analyzer array's span.
+        n_tth, n_gam : int
+            Grid resolution along dtth and dgam.
+
+        Returns:
+        --------
+        grid : dict
+            'dtth', 'dgam' (n_gam, n_tth): angular offsets from the array
+            center (same convention as analyzer_array_offsets' dtth/dgam).
+            'frequencies_<unit>', 'IXS_stokes' (n_gam, n_tth, nmodes).
+        """
+        Q_center = np.asarray(Q_center)
+        if coords.lower() == 'primitive':
+            Q_center_conv = aute2_prim2conv_k(Q_center)
+        else:
+            Q_center_conv = Q_center
+
+        if self.sixc is None or self.sixc.sixc is None:
+            raise RuntimeError(
+                "analyze_array_grid requires the sixcircle library to compute "
+                "real per-point Q positions (check config.SIXCIRCLE_PATH).")
+
+        hkl = (float(Q_center_conv[0]), float(Q_center_conv[1]), float(Q_center_conv[2]))
+        analyzers = self.sixc.analyzer_array_offsets(hkl)
+        if analyzers is None:
+            raise RuntimeError(
+                f"Q={tuple(Q_center_conv)} is inaccessible under the current "
+                f"frozen angles/limits, so no analyzer-array grid can be calculated.")
+
+        dtth_vals = [info['dtth'] for info in analyzers.values()]
+        dgam_vals = [info['dgam'] for info in analyzers.values()]
+        dtth = np.linspace(extent * min(dtth_vals), extent * max(dtth_vals), n_tth)
+        dgam = np.linspace(extent * min(dgam_vals), extent * max(dgam_vals), n_gam)
+
+        grid = self.sixc.compute_angle_grid(hkl, dtth, dgam)
+        if grid is None:
+            raise RuntimeError(
+                f"Q={tuple(Q_center_conv)} is inaccessible under the current "
+                f"frozen angles/limits, so no analyzer-array grid can be calculated.")
+
+        result = self.analyze_grid(grid['Q_conv'], grid['tth'], grid['gam'], freq_unit=freq_unit)
+        grid.update(result)
+        return grid
+
     def _print_array_results(self, array_results, freq_unit='meV'):
         """Print compact analyzer array table: dQ offsets + freq/Pol pairs"""
 
@@ -867,10 +1001,11 @@ def interactive_mode(material='AuTe2'):
                 Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
                 array_results = analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
                 analyzer_qs = {str(int(r['analyzer'][1:])): r['Q_conv'] for r in array_results}
+                grid = analyzer.analyze_array_grid(Q_conv, coords='conventional', freq_unit=freq_unit)
 
                 from .array_viz import plot_analyzer_array
                 Q_label = f"({Q_conv[0]:.3f}, {Q_conv[1]:.3f}, {Q_conv[2]:.3f})"
-                fig = plot_analyzer_array(array_results, freq_unit=freq_unit, Q_label=Q_label)
+                fig = plot_analyzer_array(array_results, freq_unit=freq_unit, Q_label=Q_label, grid=grid)
                 plt.show(block=False)
                 _safe_pause(plt, fig, 0.1)
 

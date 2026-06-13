@@ -11,7 +11,7 @@ log10(IXS_stokes), so both quantities can be read off the same plot.
 import numpy as np
 
 
-def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None):
+def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None, grid=None):
     """
     Build a grid figure with one frequency-contour subplot per phonon branch.
 
@@ -25,6 +25,12 @@ def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None):
         'meV', 'THz', or 'cm-1' -- selects frequencies_<unit> and axis labels.
     Q_label : str, optional
         Text describing the center Q, shown in the figure title.
+    grid : dict, optional
+        Output of SingleQAnalyzer.analyze_array_grid() -- a denser
+        (dtth, dgam) grid spanning a wider region than the analyzer array
+        itself. If given, the frequency contours are drawn over this wider
+        grid instead of just the 28 analyzer positions, with the actual
+        analyzers overlaid as circles as usual.
 
     Returns
     -------
@@ -55,12 +61,17 @@ def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None):
         ixs[zi, xi, :] = r['IXS_stokes']
 
     # log10(IXS) -> marker area, shared scale across all modes so sizes are
-    # comparable subplot-to-subplot.
-    log_ixs = np.log10(np.clip(ixs, 1e-12, None))
+    # comparable subplot-to-subplot. Some modes are selection-rule-forbidden
+    # at this Q (IXS ~ 1e-30, numerically zero), so the true minimum is not a
+    # useful floor -- it would compress all the "real" signal (which spans
+    # ~4-5 decades) into a sliver near the top of the size range. Instead,
+    # cap the dynamic range to a fixed number of decades below the brightest
+    # point; anything dimmer than that floors out at the minimum marker size.
+    DYNAMIC_RANGE_DECADES = 4.0
+    log_ixs = np.log10(np.clip(ixs, 1e-300, None))
     finite = log_ixs[np.isfinite(log_ixs)]
-    vmin, vmax = (finite.min(), finite.max()) if finite.size else (0.0, 1.0)
-    if vmax <= vmin:
-        vmax = vmin + 1.0
+    vmax = finite.max() if finite.size else 0.0
+    vmin = vmax - DYNAMIC_RANGE_DECADES
 
     def sizes_for(log_vals):
         frac = np.clip((log_vals - vmin) / (vmax - vmin), 0.0, 1.0)
@@ -71,9 +82,16 @@ def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None):
     fig, axes = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 2.6 * nrows),
                               squeeze=False)
 
+    if grid is not None:
+        grid_dtth, grid_dgam, grid_freq = grid['dtth'], grid['dgam'], grid[freq_key]
+
     for imode in range(n_modes):
         ax = axes[imode // ncols, imode % ncols]
-        cf = ax.contourf(dtth, dgam, freq[:, :, imode], levels=12, cmap='viridis')
+        if grid is not None:
+            cf = ax.contourf(grid_dtth, grid_dgam, grid_freq[:, :, imode],
+                              levels=12, cmap='viridis')
+        else:
+            cf = ax.contourf(dtth, dgam, freq[:, :, imode], levels=12, cmap='viridis')
         cbar = fig.colorbar(cf, ax=ax)
         cbar.set_label(freq_label)
 
