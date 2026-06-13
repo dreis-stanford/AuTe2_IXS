@@ -363,10 +363,10 @@ class SixCircleInterface:
                 'alpha': alpha, 'beta': beta}
 
     def analyzer_array_offsets(self, hkl: Tuple[float, float, float]
-                                ) -> Optional[Dict[str, np.ndarray]]:
+                                ) -> Optional[Dict[str, dict]]:
         """
-        Compute (dH, dK, dL) offsets from hkl for each of the 28 analyzers in
-        the BL43LXU array, for the arm centered on hkl.
+        Compute (dH, dK, dL) and (dtth, dgam) offsets from hkl for each of the
+        28 analyzers in the BL43LXU array, for the arm centered on hkl.
 
         For each analyzer, tth and gam are offset from the center position by
         the fixed angular steps set by the array geometry (x_spac, z_spac,
@@ -376,9 +376,18 @@ class SixCircleInterface:
         printing/file output. Analyzer names follow ca6()'s convention
         (a03-a09, a14-a20, a25-a31, a35-a41).
 
-        Returns a dict {analyzer_name: np.array([dH, dK, dL])}, or None if
-        hkl is inaccessible under the current frozen angles/limits. Raises
-        RuntimeError if sixcircle is not loaded.
+        Returns a dict {analyzer_name: info}, or None if hkl is inaccessible
+        under the current frozen angles/limits. Raises RuntimeError if
+        sixcircle is not loaded. Each `info` dict has:
+          - 'dQ':   np.array([dH, dK, dL]), offset from the center Q
+          - 'dtth', 'dgam': angular offsets (degrees) from the center
+            (tth, gam), i.e. the analyzer array's effective 2D layout.
+            dtth is symmetric about 0 (x_cen is the middle column), but with
+            BL43LXU's current geometry (z_cen=0, the first row), dgam is <= 0
+            -- the array extends to one side (lower gamma) only, not
+            symmetrically. This is the real array geometry, not a bug.
+          - 'xi', 'zi': horizontal/vertical grid indices (0-based) into the
+            x_n x z_n analyzer array
         """
         if self.sixc is None:
             raise RuntimeError(
@@ -417,7 +426,13 @@ class SixCircleInterface:
 
                     sixc.mv(tth=A_tth, gam=A_gam)
                     Q_analyzer = np.array([sixc.H, sixc.K, sixc.L])
-                    offsets[name] = Q_analyzer - Q_center
+                    offsets[name] = {
+                        'dQ': Q_analyzer - Q_center,
+                        'dtth': A_tth - ca_tth,
+                        'dgam': A_gam - ca_gam,
+                        'xi': xi,
+                        'zi': zi,
+                    }
 
             # Restore center position
             sixc.mv(tth=ca_tth, th=angles['th'], chi=angles['chi'],

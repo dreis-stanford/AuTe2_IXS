@@ -32,6 +32,17 @@ PRIMARY_T = 0.3   # L-char below this  -> 'M(T)' (mixed, primarily transverse)
 #                   anything else      -> 'M'    (mixed)
 
 
+def _safe_pause(plt, fig, dt):
+    """Pump the GUI event loop for `fig`, tolerating the user having closed
+    the window early (figure already gone, or backend raises on a stale
+    canvas) -- avoids crashing the REPL on plt.pause()/plt.close()."""
+    try:
+        if plt.fignum_exists(fig.number):
+            plt.pause(dt)
+    except Exception:
+        pass
+
+
 def classify_polarization(L):
     """
     Classify mode polarization from longitudinal character L in [0, 1].
@@ -450,20 +461,25 @@ class SingleQAnalyzer:
         import io
         
         for name in sorted(analyzers.keys()):
-            dQ = np.array(analyzers[name])
+            info = analyzers[name]
+            dQ = np.array(info['dQ'])
             Q_analyzer = Q_center_conv + dQ
-            
+
             # Analyze this Q point (suppress printing and form factor messages)
             old_stdout = sys.stdout
             sys.stdout = io.StringIO()
             try:
-                result = self.analyze(Q_analyzer, coords='conventional', 
+                result = self.analyze(Q_analyzer, coords='conventional',
                                      freq_unit=freq_unit, print_results=False)
             finally:
                 sys.stdout = old_stdout
-            
+
             result['analyzer'] = name
             result['Q_offset'] = dQ
+            result['dtth'] = info['dtth']
+            result['dgam'] = info['dgam']
+            result['xi'] = info['xi']
+            result['zi'] = info['zi']
             array_results.append(result)
         
         if print_results:
@@ -835,13 +851,23 @@ def interactive_mode(material='AuTe2'):
             if current_q is None:
                 print("\n⚠ Enter a Q point first\n")
                 continue
+            fig = None
             try:
+                import matplotlib.pyplot as plt
                 Q_conv = analyzer.prim2conv(current_q) if coord_system == 'primitive' else current_q
                 array_results = analyzer.analyze_array(Q_conv, coords='conventional', freq_unit=freq_unit)
                 analyzer_qs = {str(int(r['analyzer'][1:])): r['Q_conv'] for r in array_results}
+
+                from .array_viz import plot_analyzer_array
+                Q_label = f"({Q_conv[0]:.3f}, {Q_conv[1]:.3f}, {Q_conv[2]:.3f})"
+                fig = plot_analyzer_array(array_results, freq_unit=freq_unit, Q_label=Q_label)
+                plt.show(block=False)
+                _safe_pause(plt, fig, 0.1)
+
                 print("Enter analyzer # for its IXS table (blank: redisplay table, 'q': back)\n")
                 while True:
                     sel = input("Analyzer #: ").strip().lower()
+                    _safe_pause(plt, fig, 0.05)
                     if sel in ('q', 'quit', 'b', 'back'):
                         break
                     if not sel:
@@ -860,6 +886,14 @@ def interactive_mode(material='AuTe2'):
                 print(f"\n✗ {e}\n")
                 import traceback
                 traceback.print_exc()
+            finally:
+                if fig is not None:
+                    try:
+                        import matplotlib.pyplot as plt
+                        if plt.fignum_exists(fig.number):
+                            plt.close(fig)
+                    except Exception:
+                        pass
             continue
 
         elif user_input.lower() == 'angles':
