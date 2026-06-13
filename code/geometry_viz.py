@@ -240,8 +240,12 @@ def plot_scattering_geometry(angles, hkl=None, surface_normal=None, ub=None,
         # 2theta is read directly from the k_out direction (no tth circle/pad).
 
     # --- Fixed lab frame, offset to the (empty) upper-right corner ----------
+    # With the top-down view (screen_x = -y_lab, screen_y = +x_lab), the
+    # upper-right of the screen is x_lab>0, y_lab<0. The z arrow (lab
+    # vertical) points straight at the viewer in this view, so it renders
+    # as a short stub/point -- expected for a top-down view.
     lim = 1.4
-    lab_origin = np.array([lim * 0.85, lim * 0.85, lim * 0.80])
+    lab_origin = np.array([lim * 0.85, -lim * 0.85, lim * 0.80])
     lab_len = 0.35  # deliberately smaller than k_in (=1): just a reference
     for axis_vec, name in [((lab_len, 0, 0), 'x'), ((0, lab_len, 0), 'y'),
                            ((0, 0, lab_len), 'z')]:
@@ -273,8 +277,17 @@ def plot_scattering_geometry(angles, hkl=None, surface_normal=None, ub=None,
         ax.set_box_aspect((1, 1, 1))
     except Exception:
         pass
-    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('z')
-    ax.view_init(elev=22, azim=-66)
+    ax.set_xlabel('x'); ax.set_ylabel('y')
+    # Top-down view of the (horizontal) scattering plane: looking along -z
+    # (lab vertical), with screen_x = -y_lab and screen_y = +x_lab. This
+    # puts k_in (along -y at mu=0) pointing right (beam arrives from the
+    # left), and k_out's sin(tth) component along +x_lab pointing up for
+    # tth > 0 -- i.e. exactly how the experiment looks viewed from above.
+    # z (lab vertical) now points at the viewer, so its ticks collapse to a
+    # point on screen -- hide them (the lab-frame triad still labels z).
+    ax.set_zticks([])
+    ax.set_zlabel('')
+    ax.view_init(elev=90, azim=-90, roll=90)
 
     if title is None:
         hkl_str = f"  HKL=({hkl[0]:g}, {hkl[1]:g}, {hkl[2]:g})" if hkl is not None else ""
