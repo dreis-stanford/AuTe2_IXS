@@ -571,11 +571,13 @@ class SingleQAnalyzer:
         }
 
     def analyze_array_grid(self, Q_center, coords='conventional', freq_unit='meV',
-                            extent=2.0, n_tth=21, n_gam=21):
+                            dtth_range=(-3.0, 3.0), dgam_range=(-3.0, 1.0),
+                            n_tth=25, n_gam=25):
         """
-        Phonon frequency/IXS maps over a (dtth, dgam) region `extent` times
-        wider than the BL43LXU analyzer array spans, for the background of
-        the array-command contour plots (see array_viz.plot_analyzer_array).
+        Phonon frequency/IXS maps over a (dtth, dgam) region, for the
+        background of the array-command contour plots (see
+        array_viz.plot_analyzer_array). Wider than the BL43LXU analyzer
+        array itself spans (dtth in [-2.1, 2.1] deg, dgam in [-2.1, 0] deg).
 
         Parameters
         ----------
@@ -585,9 +587,9 @@ class SingleQAnalyzer:
             'primitive' or 'conventional'
         freq_unit : str
             'meV', 'THz', or 'cm-1'
-        extent : float
-            Factor by which to widen the (dtth, dgam) range relative to the
-            actual analyzer array's span.
+        dtth_range, dgam_range : (float, float)
+            (min, max) angular offsets (degrees) from the array center to
+            cover.
         n_tth, n_gam : int
             Grid resolution along dtth and dgam.
 
@@ -610,16 +612,9 @@ class SingleQAnalyzer:
                 "real per-point Q positions (check config.SIXCIRCLE_PATH).")
 
         hkl = (float(Q_center_conv[0]), float(Q_center_conv[1]), float(Q_center_conv[2]))
-        analyzers = self.sixc.analyzer_array_offsets(hkl)
-        if analyzers is None:
-            raise RuntimeError(
-                f"Q={tuple(Q_center_conv)} is inaccessible under the current "
-                f"frozen angles/limits, so no analyzer-array grid can be calculated.")
 
-        dtth_vals = [info['dtth'] for info in analyzers.values()]
-        dgam_vals = [info['dgam'] for info in analyzers.values()]
-        dtth = np.linspace(extent * min(dtth_vals), extent * max(dtth_vals), n_tth)
-        dgam = np.linspace(extent * min(dgam_vals), extent * max(dgam_vals), n_gam)
+        dtth = np.linspace(dtth_range[0], dtth_range[1], n_tth)
+        dgam = np.linspace(dgam_range[0], dgam_range[1], n_gam)
 
         grid = self.sixc.compute_angle_grid(hkl, dtth, dgam)
         if grid is None:

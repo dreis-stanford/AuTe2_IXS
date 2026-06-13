@@ -5,8 +5,9 @@ For each phonon branch, plots a contour map of the mode frequency over the
 analyzer array's (delta_tth, delta_gamma) layout -- the angular offsets of
 each analyzer from the array center, computed by
 SixCircleInterface.analyzer_array_offsets(). The IXS Stokes cross-section at
-each analyzer is overlaid as an open circle whose area encodes
-log10(IXS_stokes), so both quantities can be read off the same plot.
+each analyzer is overlaid as an open circle whose area encodes IXS_stokes on
+a linear scale (saturating at both ends), so both quantities can be read off
+the same plot.
 """
 import numpy as np
 
@@ -60,21 +61,26 @@ def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None, grid=None)
         freq[zi, xi, :] = r[freq_key]
         ixs[zi, xi, :] = r['IXS_stokes']
 
-    # log10(IXS) -> marker area, shared scale across all modes so sizes are
-    # comparable subplot-to-subplot. Some modes are selection-rule-forbidden
-    # at this Q (IXS ~ 1e-30, numerically zero), so the true minimum is not a
-    # useful floor -- it would compress all the "real" signal (which spans
-    # ~4-5 decades) into a sliver near the top of the size range. Instead,
-    # cap the dynamic range to a fixed number of decades below the brightest
-    # point; anything dimmer than that floors out at the minimum marker size.
-    DYNAMIC_RANGE_DECADES = 4.0
-    log_ixs = np.log10(np.clip(ixs, 1e-300, None))
-    finite = log_ixs[np.isfinite(log_ixs)]
-    vmax = finite.max() if finite.size else 0.0
-    vmin = vmax - DYNAMIC_RANGE_DECADES
+    # IXS -> marker area, shared scale across all modes so sizes are
+    # comparable subplot-to-subplot. IXS_stokes spans many decades (some
+    # modes are selection-rule-forbidden, ~0), so a linear scale across the
+    # full min/max would make almost everything either invisible or
+    # saturated. Instead use a linear scale between the 10th/90th
+    # percentiles of the (finite) values, saturating outside that range --
+    # values at/below the low percentile floor out at the minimum marker
+    # size ("a single point"), values at/above the high percentile cap out
+    # at the maximum size.
+    SATURATION_PERCENTILES = (10.0, 90.0)
+    finite = ixs[np.isfinite(ixs)]
+    if finite.size:
+        vmin, vmax = np.percentile(finite, SATURATION_PERCENTILES)
+    else:
+        vmin, vmax = 0.0, 1.0
+    if vmax <= vmin:
+        vmax = vmin + 1.0
 
-    def sizes_for(log_vals):
-        frac = np.clip((log_vals - vmin) / (vmax - vmin), 0.0, 1.0)
+    def sizes_for(vals):
+        frac = np.clip((vals - vmin) / (vmax - vmin), 0.0, 1.0)
         return 15.0 + frac * 200.0  # marker area, points^2
 
     ncols = 3
@@ -95,34 +101,47 @@ def plot_analyzer_array(array_results, freq_unit='meV', Q_label=None, grid=None)
         cbar = fig.colorbar(cf, ax=ax)
         cbar.set_label(freq_label)
 
-        ax.scatter(dtth, dgam, s=sizes_for(log_ixs[:, :, imode]),
+        ax.scatter(dtth, dgam, s=sizes_for(ixs[:, :, imode]),
                    facecolors='none', edgecolors='red', linewidths=1.4)
 
         mean_f = np.nanmean(freq[:, :, imode])
         ax.set_title(f'Mode {imode + 1} (~{mean_f:.1f} {freq_label})')
-        ax.set_xlabel(r'$\Delta$tth (deg)')
-        ax.set_ylabel(r'$\Delta\gamma$ (deg)')
+        ax.set_xticks([])
+        ax.set_yticks([])
 
     for k in range(n_modes, nrows * ncols):
         fig.delaxes(axes[k // ncols, k % ncols])
 
-    # Marker-size legend for log10(IXS_stokes)
+    # Marker-size legend for IXS_stokes (linear, saturating outside [vmin, vmax])
     legend_vals = np.linspace(vmin, vmax, 3)
+    legend_labels = [f'≤{vmin:.2g}'] + [f'{v:.2g}' for v in legend_vals[1:-1]] \
+        + [f'≥{vmax:.2g}']
     legend_handles = [
         Line2D([], [], marker='o', linestyle='', markerfacecolor='none',
                markeredgecolor='red', markeredgewidth=1.4,
                markersize=np.sqrt(sizes_for(np.array([v]))[0]),
-               label=f'$10^{{{v:.1f}}}$')
-        for v in legend_vals
+               label=lbl)
+        for v, lbl in zip(legend_vals, legend_labels)
     ]
     fig.legend(handles=legend_handles, ncol=len(legend_handles),
-               title='IXS Stokes (barn/sr, circle area ~ log scale)',
+               title='IXS Stokes (barn/sr, circle area ~ linear scale, saturating)',
                loc='lower center', frameon=False)
+
+    # Plot range, common to all subplots -- shown once here since the
+    # per-subplot axes are unlabeled to save space.
+    dtth_lo, dtth_hi = np.nanmin(dtth), np.nanmax(dtth)
+    dgam_lo, dgam_hi = np.nanmin(dgam), np.nanmax(dgam)
+    if grid is not None:
+        dtth_lo, dtth_hi = grid_dtth.min(), grid_dtth.max()
+        dgam_lo, dgam_hi = grid_dgam.min(), grid_dgam.max()
 
     title = ('Analyzer Array — Phonon Frequencies (contours) '
              '& IXS Stokes Intensity (circles)')
     if Q_label:
         title += f'\nQ_center = {Q_label}'
+    title += (f'\nPlot range: '
+              f'Δtth ∈ [{dtth_lo:.1f}, {dtth_hi:.1f}]°, '
+              f'Δγ ∈ [{dgam_lo:.1f}, {dgam_hi:.1f}]°')
     fig.suptitle(title)
-    fig.tight_layout(rect=(0, 0.06, 1, 0.93))
+    fig.tight_layout(rect=(0, 0.06, 1, 0.91))
     return fig
