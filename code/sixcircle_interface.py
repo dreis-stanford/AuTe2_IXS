@@ -76,8 +76,13 @@ class SixCircleInterface:
             # whatever init_rqd() did at import time via previous.bl.conf.
             sixcircle_rqd.setbl(config.BEAMLINE)
 
-            # Manually initialize all required variables
-            sixcircle.LAMBDA = config.WAVELENGTH
+            # Manually initialize all required variables. Use setorder()
+            # (not a bare sixcircle.LAMBDA assignment) so sixcircle_rqd's
+            # silicon_order global -- used by pa() and analyzer_mask.py --
+            # and the persisted previous.bl.conf stay in sync with
+            # config.SI_ORDER (previous.bl.conf otherwise keeps reporting a
+            # stale Si order from before config.SI_ORDER was last changed).
+            sixcircle_rqd.setorder(config.SI_ORDER)
             sixcircle.g_sample = 'AuTe2_exp'
             sixcircle.g_aa = 7.189
             sixcircle.g_bb = 4.407
