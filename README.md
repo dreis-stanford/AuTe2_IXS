@@ -8,8 +8,7 @@ This project integrates:
 - DFT phonon calculations to predict phonon dispersions and eigenvectors
 - Sixcircle diffractometer interface for experiment planning at SPring-8 
 - Modulated structure handling for CDW satellite reflections
-- Q-point optimization module to help maximize information from measurements
-  (implemented as a standalone class, not yet wired into the interactive tools)
+- Measurement planning (in progress; see TODO.md)
 
 ## Quick Start
 
@@ -34,8 +33,6 @@ For SPring-8 users, edit code/config.py to set SIXCIRCLE_PATH
   `config.DEBYE_WALLER_MODE`
 - code/form_factors.py - Atomic form factors f(Q), and full f(Q,E) =
   f0(Q) + f'(E) + i*f''(E) via xraylib (`calc_form_factor`)
-- code/q_optimizer.py - Q-point optimization (standalone module, not yet
-  wired into the interactive tools)
 - analyze_q.py - AuTe2 launcher
 - test_integration.py - Sixcircle integration tests; requires the external
   sixcircle package configured for a real instrument (not a general
@@ -128,7 +125,6 @@ mode/values and angle limits start from `code/config.py` (`FROZEN_ANGLES`,
 ### Sixcircle integration
 - Diffractometer interface for SPring-8 BL43LXU (1,184+ lines)
 - Modulated structure and satellite handling
-- Q-point optimization (standalone framework, see Project Structure)
 - Simulation mode for testing
 - Added or0/or1 orientation reflections used by sixcircle for angle calculations
 

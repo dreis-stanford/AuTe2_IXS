@@ -93,16 +93,26 @@ geometry_viz front-face-view correction (pending commit/push).
 
 ## Next steps (not yet started)
 
-1. **Measurement planning** (TODO #4) and **wiring up `code/q_optimizer.py`**
-   — currently a standalone, unused module (ranks candidate Q-points by
-   expected phonon-mode intensity). Use it to help build the AuTe2
-   measurement plan (CDW b-axis modes, satellite positions, diffractometer
-   accessibility via `ANGLE_LIMITS`, estimated measurement times).
-2. **Verify lab-frame axis conventions** (TODO #6a, second bullet): the
-   view's k_in/k_out/tth geometry is self-consistent with
-   `_kin_hat`/`_kout_hat`, but the th/chi/phi rotation sense vs. the real
-   BL43LXU instrument is still unverified against the sixcircle
-   documentation.
+Priorities discussed 2026-06-13 (see TODO.md "Next Session Priorities" for
+full detail):
+
+1. **Beamtime data-analysis tools** (TODO #9) — tools to analyze data
+   collected during the experiment and compare against this codebase's
+   predictions.
+2. **Measurement planning** (TODO #4) + **count-rate estimation** (TODO
+   #4a) — a new script built on the real `analyze()`/`SixCircleInterface`
+   pipeline (CDW b-axis modes, satellite positions, diffractometer
+   accessibility, estimated measurement times). `code/q_optimizer.py` was
+   archived to `code/archive/` this session — its intensity model was
+   superseded by `code/ixs.py`, and its grouping/accessibility logic was
+   never implemented.
+3. **Code clean-up & understanding pass** (TODO #10), **Silicon
+   real-experiment compatibility** (TODO #11), and **interactive
+   sixc/python passthrough** (TODO #12).
+
+Lab-frame axis conventions (TODO #6a) were checked against the sixcircle
+documentation this session (see "Geometry view" above) — all consistent
+except one low-impact, non-blocking gam-sign detail.
 
 ## Environment notes
 - venv at `venv/`; each Bash call is a fresh shell, so always set

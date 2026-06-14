@@ -6,7 +6,6 @@ import numpy as np
 from . import config
 from .sixcircle_interface import SixCircleInterface
 from .modulated_structure import ModulatedStructure
-from .q_optimizer import QPointOptimizer
 
 def test_configuration():
     """Test configuration loading"""
@@ -107,57 +106,6 @@ def test_modulated_structure():
     for r in accessible[:5]:
         print(f"  {r['hkl']}, 2θ = {r['two_theta']:.2f}°, {r['type']}")
 
-def test_q_optimizer():
-    """Test Q-point optimization"""
-    print("\n" + "="*70)
-    print("Testing Q-Point Optimizer")
-    print("="*70)
-    
-    opt = QPointOptimizer()
-    
-    # Define some phonon Q-points to measure (along Γ-X)
-    q_points = [
-        (0.1, 0, 0),
-        (0.2, 0, 0),
-        (0.3, 0, 0),
-        (0.4, 0, 0),
-        (0.5, 0, 0),  # X point
-    ]
-    
-    # Define available Bragg peaks
-    bragg_peaks = [
-        (1, 0, 0),
-        (2, 0, 0),
-        (3, 0, 0),
-        (1, 1, 0),
-        (2, 1, 0),
-        (0, 1, 0),
-        (1, 0, 1),
-    ]
-    
-    print(f"\nPhonon Q-points: {len(q_points)}")
-    print(f"Available Bragg peaks: {len(bragg_peaks)}")
-    
-    # Rank Bragg peaks for one Q-point
-    print("\nRanking Bragg peaks for q = (0.3, 0, 0)...")
-    ranked = opt.rank_q_points_for_mode(
-        q_mode=(0.3, 0, 0),
-        branch_index=0,
-        candidate_q_points=bragg_peaks
-    )
-    
-    print("\nTop 3 Bragg peaks:")
-    for i, r in enumerate(ranked[:3], 1):
-        sens = opt.longitudinal_vs_transverse(r['q_phonon'], r['Q_bragg'])
-        print(f"  {i}. Q_Bragg = {r['Q_bragg']}")
-        print(f"     Q_transfer = {r['Q_transfer']}")
-        print(f"     Intensity = {r['expected_intensity']:.3f}")
-        print(f"     Type: {sens['mode_type']} (angle = {sens['Q_angle_to_q']:.1f}°)")
-    
-    # Get measurement plan
-    print("\nGenerating optimal measurement plan...")
-    opt.print_optimization_summary(q_points, bragg_peaks)
-
 def run_all_tests():
     """Run all integration tests"""
     print("\n" + "#"*70)
@@ -167,8 +115,7 @@ def run_all_tests():
     test_configuration()
     test_sixcircle_interface()
     test_modulated_structure()
-    test_q_optimizer()
-    
+
     print("\n" + "#"*70)
     print("# All tests completed!")
     print("#"*70 + "\n")

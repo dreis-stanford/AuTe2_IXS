@@ -2,18 +2,27 @@
 
 ## Next Session Priorities (set 2026-06-13, end of day)
 
-With the analyzer-array visualization (performance, wider-region grid,
-linear-saturating IXS scale, linear-radius marker sizes) and the
-geometry-viz UB refactor + top-down default view all done, the suggested
-order is:
+With the analyzer-array visualization, geometry-viz UB refactor +
+front-face default view, and the lab-frame axis convention quick-check
+(#6a) all done, the codebase is close to "ready for the beamtime." The
+suggested order, per discussion 2026-06-13:
 
-1. **Measurement planning** (#4) and **wiring up `code/q_optimizer.py`**
-   (currently a standalone, unwired module - see README "Project
-   Structure") - use it to help choose/rank Q-points for the measurement
-   plan.
-2. Verify the lab-frame axis conventions
-   (`verify_scattering.rotate_Q_to_lab_frame`, sense of th/chi/phi
-   rotations) against the sixcircle documentation (see #6a, second bullet).
+1. **Beamtime data-analysis tools** (#9) -- tools for analyzing data
+   collected during the experiment (fitting measured spectra, comparing to
+   this codebase's predictions). Flagged as wanted even ahead of the
+   broader clean-up below.
+2. **Measurement planning** (#4), now built on the real `analyze()`
+   pipeline rather than the archived `q_optimizer.py` -- include a
+   count-rate estimate (#4a) to support the "estimate measurement times"
+   bullet.
+3. **General code clean-up / understanding pass** (#10) -- review all
+   modules, add clear examples, clean up directory structure and docs.
+4. **Silicon real-experiment compatibility** (#11) -- update the Si
+   interactive tool to work like the AuTe2 one (`angles`/`viz`/`array`),
+   since Si is a well-understood material good for sanity-checking the real
+   instrument.
+5. **Interactive sixc/python passthrough** (#12) -- add a command to enter
+   arbitrary `sixc`/python expressions from the interactive REPLs.
 
 ## High Priority
 
@@ -46,11 +55,23 @@ order is:
 ## Medium Priority
 
 ### 4. Measurement Planning
-- [ ] Create measurement plan script for AuTe2
+- [ ] Create a new measurement-planning script for AuTe2, built on the real
+      `SingleQAnalyzer.analyze()` IXS pipeline (form factors, Debye-Waller,
+      Bose factors) and `SixCircleInterface`/`ANGLE_LIMITS` -- NOT the old
+      `code/q_optimizer.py` (archived to `code/archive/`, 2026-06-13: its
+      intensity model was superseded by `code/ixs.py`, and its
+      accessibility/grouping logic was never implemented; the simple
+      `|Q_hat . q_hat|^2` longitudinal/transverse check may still be useful
+      to port over)
 - [ ] Optimize Q-points for b-axis (CDW direction)
 - [ ] Include satellite positions
 - [ ] Calculate diffractometer accessibility
-- [ ] Estimate measurement times
+- [ ] Estimate measurement times (depends on #4a, count-rate estimate)
+
+### 4a. Count-Rate Estimation
+- [ ] Estimate expected count rates from incident flux + crystal size
+      (volume/absorption), combined with the existing IXS cross-section
+      (`code/ixs.py`) -- feeds into #4's "estimate measurement times"
 
 ### 5. Documentation
 - [ ] Add measurement strategy guide to README
@@ -87,15 +108,48 @@ order is:
       where mplot3d's automatic depth-sorting could place k_in/k_out/Q
       behind the now-opaque crystal faces; draw order now guarantees they
       render on top.
-- [ ] Double-check the lab-frame axis conventions (origin/sense of the
-      th and tth rotations) against the sixcircle documentation
-      (`~/Documents/MyPython/Others/sixcircle_1p85/sixcircle_documentation/`)
-      to confirm `verify_scattering.rotate_Q_to_lab_frame` matches the real
-      instrument, not just an internally-consistent convention. (Partial
-      check 2026-06-13: the top-down view's k_in/k_out/tth geometry is
-      self-consistent with `_kin_hat`/`_kout_hat`'s lab-frame definitions --
-      no inconsistency found there -- but th/chi/phi rotation sense vs. the
-      real instrument is still unverified.)
+- [x] Double-check the lab-frame axis conventions against the sixcircle
+      documentation (`sixcircle_axis_definition_table.pdf` in
+      `~/Documents/MyPython/Others/sixcircle_1p85/sixcircle_documentation/`).
+      2026-06-13: verified algebraically that `rotate_Q_to_lab_frame`'s
+      `R_theta`/`R_chi`/`R_phi`/`R_mu` and `_kin_hat`/`_kout_hat`'s tth
+      dependence all match Table 1 (tth and th both right-handed about lab
+      +z; chi right-handed about -y/incident-beam direction; phi shares
+      th/tth's +z axis when chi=0 and stays perpendicular to chi's axis for
+      any chi; mu's "positive = downward beam" sign matches `_kin_hat`).
+      One open detail (low-impact, not user-blocking): the doc's gam
+      sign ("positive = above the plane") may be opposite to `_kout_hat`'s
+      `-sin(gam)` term; this only affects `geometry_viz`'s drawing of
+      off-plane (gam!=0) cases, not any angle/intensity calculation (which
+      go through `sixc`'s real ca6-based geometry). Can be checked against
+      `ca6()` output at the beamline if it ever matters.
+
+### 9. Beamtime Data-Analysis Tools
+- [ ] Plan/implement tools for analyzing data collected during the
+      experiment (e.g., fitting measured IXS spectra, comparing measured
+      peak positions/intensities against this codebase's predictions).
+      Flagged 2026-06-13 as wanted ahead of the broader clean-up (#10).
+
+### 10. Code Clean-Up & Understanding Pass
+- [ ] Review all modules so the user has a clear picture of what each does
+      (builds on #5's documentation items, but broader: a full pass over
+      the codebase, not just measurement-specific docs)
+- [ ] Add/curate clear example scripts covering common workflows
+- [ ] Review and clean up directory structure (repo root and `archive/`
+      have accumulated many one-off scripts from earlier development)
+
+### 11. Silicon Real-Experiment Compatibility
+- [ ] Update the Si interactive tool (`analyze_si.py` /
+      `code/single_q_analysis_si.py`) to be compatible with a real
+      experiment the way the AuTe2 tool is (real diffractometer angles via
+      `angles`, geometry `viz`, analyzer `array`, etc.). Si is highly
+      symmetric and well-understood, making it a good sanity-check material
+      at the beamline.
+
+### 12. Interactive sixc/Python Passthrough
+- [ ] Add a command to the interactive REPL(s) to enter arbitrary
+      `sixc`/python expressions directly -- an escape hatch for ad-hoc
+      checks during the experiment without leaving the tool.
 
 ## Low Priority
 
@@ -140,7 +194,13 @@ order is:
         the figure title (`b6737f0`).
       - IXS marker size now linear in radius (not area), min marker area
         ~3 pt^2 / max ~215 pt^2, for better small-vs-large contrast.
-- [x] Geometry-viz UB refactor and top-down default view (see #6a).
+- [x] Geometry-viz UB refactor and front-face default view (see #6a).
+- [x] Archived `code/q_optimizer.py` to `code/archive/` (2026-06-13): an
+      early placeholder/skeleton whose intensity model was superseded by
+      `code/ixs.py`/`single_q_analysis.py`, and whose accessibility/grouping
+      logic was never implemented. Removed from `code/__init__.py`'s
+      `__all__` and `code/test_sixcircle_integration.py`. See #4 for the
+      replacement measurement-planning plan.
 
 ## Notes
 
